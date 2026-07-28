@@ -86,9 +86,21 @@ app.delete("/api/history/:id?", async (req, resp) => {
 app.get("/api/types", async (req, resp) => {
   try {
     const typesFromFile = await readJsonFile(TYPES_FILE, null);
-    if (typesFromFile !== null) {
-      memoryTypes = typesFromFile;
-      return resp.json(typesFromFile);
+    if (typesFromFile !== null && typeof typesFromFile === "object") {
+      if (Array.isArray(typesFromFile.docTypes)) {
+        typesFromFile.docTypes.forEach(t => {
+          if (!memoryTypes.docTypes.includes(t)) memoryTypes.docTypes.push(t);
+        });
+      }
+      if (typesFromFile.pathSuggestions && typeof typesFromFile.pathSuggestions === "object") {
+        memoryTypes.pathSuggestions = memoryTypes.pathSuggestions || {};
+        Object.keys(typesFromFile.pathSuggestions).forEach(t => {
+          if (!memoryTypes.pathSuggestions[t]) memoryTypes.pathSuggestions[t] = [];
+          typesFromFile.pathSuggestions[t].forEach(p => {
+            if (p && !memoryTypes.pathSuggestions[t].includes(p)) memoryTypes.pathSuggestions[t].push(p);
+          });
+        });
+      }
     }
     resp.json(memoryTypes);
   } catch (err) {
@@ -100,7 +112,9 @@ app.post("/api/types", async (req, resp) => {
   try {
     const { docTypes, pathSuggestions } = req.body;
     if (Array.isArray(docTypes)) {
-      memoryTypes.docTypes = docTypes;
+      docTypes.forEach(t => {
+        if (!memoryTypes.docTypes.includes(t)) memoryTypes.docTypes.push(t);
+      });
     }
     if (pathSuggestions && typeof pathSuggestions === "object") {
       memoryTypes.pathSuggestions = memoryTypes.pathSuggestions || {};
@@ -109,14 +123,14 @@ app.post("/api/types", async (req, resp) => {
         const newPaths = pathSuggestions[t];
         if (Array.isArray(newPaths)) {
           newPaths.forEach(p => {
-            if (p && p.trim().length > 1 && !memoryTypes.pathSuggestions[t].includes(p.trim())) {
+            if (p && p.trim() && !memoryTypes.pathSuggestions[t].includes(p.trim())) {
               memoryTypes.pathSuggestions[t].push(p.trim());
             }
           });
         }
       });
     }
-    await writeJsonFile(TYPES_FILE, memoryTypes);
+    await writeJsonFile(TYPES_FILE, memoryTypes).catch(() => {});
     resp.json({ success: true, data: memoryTypes });
   } catch (err) {
     resp.status(400).json({ error: err.message });
