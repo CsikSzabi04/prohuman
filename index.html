@@ -457,7 +457,7 @@
     } catch(_) {}
   }
 
-  function savePathSuggestionForType(t, pathVal){
+  async function savePathSuggestionForType(t, pathVal){
     if(!t || !pathVal) return;
     if(!typesApiData) typesApiData = { docTypes: [], pathSuggestions: {} };
     if(!typesApiData.pathSuggestions) typesApiData.pathSuggestions = {};
@@ -467,16 +467,41 @@
       try {
         localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData));
       } catch(_) {}
+
+      const payload = {
+        docTypes: docTypes,
+        pathSuggestions: typesApiData.pathSuggestions
+      };
+
+      try {
+        await fetch('/api/types', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(payload)
+        }).catch(() => {
+          return fetch('http://localhost:88/api/types', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(payload)
+          });
+        });
+      } catch(_) {}
     }
   }
 
   async function loadTypesFromApi(){
     try {
-      const url = location.protocol === 'file:'
-        ? 'https://csikszabi04.github.io/prohuman/types_api.json'
-        : './types_api.json';
-      const resp = await fetch(url + '?v=' + Date.now());
-      if(resp.ok){
+      let resp = await fetch('/api/types').catch(() => null);
+      if(!resp || !resp.ok){
+        resp = await fetch('http://localhost:88/api/types').catch(() => null);
+      }
+      if(!resp || !resp.ok){
+        const url = location.protocol === 'file:'
+          ? 'https://csikszabi04.github.io/prohuman/types_api.json'
+          : './types_api.json';
+        resp = await fetch(url + '?v=' + Date.now());
+      }
+      if(resp && resp.ok){
         const data = await resp.json();
         if(data && typeof data === 'object'){
           if(data.pathSuggestions && typeof data.pathSuggestions === 'object'){
@@ -883,8 +908,12 @@
 
       btn.onclick = selectThisType;
       const handleInput = () => {
-        docPaths[t] = input.value.trim();
+        const pathVal = input.value.trim();
+        docPaths[t] = pathVal;
         saveDocPaths();
+        if(pathVal){
+          savePathSuggestionForType(t, pathVal);
+        }
         if (selectedType !== t) {
           selectedType = t;
           updateTypeRowSelection();
@@ -1764,22 +1793,11 @@
       }
       if(resp && resp.ok){
         const apiData = await resp.json();
-        if(Array.isArray(apiData) && apiData.length > 0){
-          const existingKeys = new Set(historyList.map(item => item.id || (item.origName + "_" + item.newName)));
-          let hasNew = false;
-          apiData.forEach(item => {
-            const key = item.id || (item.origName + "_" + item.newName);
-            if(!existingKeys.has(key)){
-              historyList.push(item);
-              existingKeys.add(key);
-              hasNew = true;
-            }
-          });
-          if(hasNew || historyList.length === 0){
-            historyList.sort((a,b) => new Date(b.isoDate || 0) - new Date(a.isoDate || 0));
-            saveHistory();
-            renderHistoryList();
-          }
+        if(Array.isArray(apiData)){
+          historyList = apiData.filter(item => item.id && !item.id.includes("demo"));
+          historyList.sort((a,b) => new Date(b.isoDate || 0) - new Date(a.isoDate || 0));
+          saveHistory();
+          renderHistoryList();
         }
       }
     } catch(err) {
