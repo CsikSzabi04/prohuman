@@ -1,0 +1,1480 @@
+<!DOCTYPE html>
+<html lang="hu">
+<head>
+<meta charset="utf-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>Szkennelt dokumentum átnevező és áthelyező</title>
+<style>
+  :root{
+    --bg:#f4f6f9; --panel:#ffffff; --line:#e2e6ee; --ink:#1c2430; --muted:#6b7686;
+    --accent:#2563eb; --accent-d:#1d4ed8; --ok:#16a34a; --warn:#d97706; --err:#dc2626;
+    --err-bg:#fef2f2;
+  }
+  *{box-sizing:border-box}
+  html,body{height:100%}
+  body{margin:0;font:15px/1.5 system-ui,Segoe UI,Roboto,Arial,sans-serif;background:var(--bg);color:var(--ink);height:100vh;display:flex;flex-direction:column;overflow:hidden}
+  header{background:var(--panel);border-bottom:1px solid var(--line);padding:10px 18px;display:flex;align-items:center;gap:14px;flex-wrap:wrap}
+  header h1{font-size:18px;margin:0;font-weight:700}
+  header .sub{color:var(--muted);font-size:13px}
+  .header-controls{display:flex;align-items:center;gap:10px;margin-left:auto}
+  .year-select-wrap{display:flex;align-items:center;gap:6px;font-size:13px;font-weight:600;color:var(--ink);background:#f0f3f8;padding:5px 10px;border-radius:8px;border:1px solid var(--line)}
+  .year-select-wrap select{font:inherit;font-weight:700;color:var(--accent-d);background:transparent;border:none;cursor:pointer;outline:none}
+  button{font:inherit;cursor:pointer;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:8px;padding:8px 14px;transition:all .15s ease}
+  button:hover{background:#f0f3f8}
+  button.primary{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:600}
+  button.primary:hover{background:var(--accent-d)}
+  button.btn-finish{background:#16a34a;border-color:#16a34a;color:#fff;font-size:16px;font-weight:700;padding:12px}
+  button.btn-finish:hover{background:#15803d;border-color:#15803d}
+  button:disabled{opacity:.4;cursor:not-allowed}
+  /* Scrollbar */
+  ::-webkit-scrollbar{width:6px;height:6px}
+  ::-webkit-scrollbar-track{background:transparent}
+  ::-webkit-scrollbar-thumb{background:#cbd5e1;border-radius:4px}
+  ::-webkit-scrollbar-thumb:hover{background:#94a3b8}
+
+  .wrap{flex:1;min-height:0;display:grid;grid-template-columns:250px 1fr 410px;gap:12px;padding:12px;overflow:hidden}
+  .wrap>.panel{height:100%;display:flex;flex-direction:column;overflow:hidden}
+  .pbody{flex:1;min-height:0;overflow:auto;display:flex;flex-direction:column}
+  
+  /* Laptop & Responsive media queries */
+  @media (max-width: 1400px) {
+    .wrap{grid-template-columns:220px 1fr 370px;gap:10px;padding:10px}
+    .type-row .type-btn{width:125px;font-size:11px;padding:6px 6px}
+    .type-row .pick-dir-btn{padding:4px 6px;font-size:10px}
+  }
+
+  @media (max-width: 1100px) {
+    .wrap{grid-template-columns:190px 1fr 330px;gap:8px;padding:8px}
+    header{padding:8px 12px}
+    header h1{font-size:15px}
+    .type-row{gap:4px;padding:3px 4px}
+    .type-row .type-btn{width:110px;font-size:11px;padding:5px 4px}
+  }
+
+  @media (max-width: 850px) {
+    body{height:auto;overflow:auto}
+    .wrap{grid-template-columns:1fr;overflow:visible}
+    .wrap>.panel{height:auto;min-height:350px}
+    .pbody{overflow:visible}
+    #previewBox{min-height:350px}
+  }
+
+  .panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;padding:14px;box-shadow:0 2px 5px rgba(0,0,0,0.02)}
+  .panel h2{margin:0 0 10px;font-size:12px;text-transform:uppercase;letter-spacing:.05em;color:var(--muted);font-weight:700}
+  /* file list */
+  #fileList{list-style:none;margin:0;padding:0}
+  #fileList li{padding:8px 10px;border-radius:8px;cursor:pointer;display:flex;align-items:center;gap:8px;font-size:13px;word-break:break-all}
+  #fileList li:hover{background:#f0f3f8}
+  #fileList li.active{background:#e7effe;outline:1px solid var(--accent)}
+  #fileList li.done{color:var(--muted)}
+  #fileList li.group{position:sticky;top:0;z-index:1;background:var(--panel);color:var(--accent-d);font-weight:700;font-size:11px;text-transform:uppercase;letter-spacing:.05em;padding:9px 6px 5px;margin-top:8px;cursor:default;border-top:1px solid var(--line)}
+  #fileList li.group:first-child{margin-top:0;border-top:none}
+  #fileList li.group:hover{background:var(--panel)}
+  .dot{width:9px;height:9px;border-radius:50%;background:#cbd3df;flex:0 0 auto}
+  li.done .dot{background:var(--ok)}
+  /* preview */
+  #previewBox{flex:1 1 auto;min-height:220px;background:#090d14;border-radius:10px;position:relative;overflow:hidden;display:flex;align-items:center;justify-content:center}
+  #previewBox.zoomable{cursor:grab}
+  #previewBox.grabbing{cursor:grabbing}
+  #previewStage{position:absolute;top:0;left:0;transform-origin:0 0;will-change:transform;display:none}
+  #previewStage img,#previewStage canvas{display:block;width:100%;height:100%;-webkit-user-drag:none;user-select:none}
+  #previewBox .empty{color:#8a94a4;font-size:14px;padding:40px;text-align:center;max-width:82%}
+  .zoomctl{position:absolute;left:10px;bottom:10px;display:flex;gap:6px;z-index:5}
+  .zoomctl button{width:34px;height:34px;padding:0;border-radius:9px;background:rgba(255,255,255,.94);border:1px solid var(--line);color:#111;font-size:20px;line-height:1;display:flex;align-items:center;justify-content:center;cursor:pointer}
+  .zoomctl button:hover{background:#fff}
+  .ocrbar{margin-top:10px;display:flex;align-items:center;gap:10px;flex-wrap:wrap}
+  .prog{flex:1;height:6px;background:#eef1f6;border-radius:99px;overflow:hidden;min-width:120px}
+  .prog>i{display:block;height:100%;width:0;background:var(--accent);transition:width .2s}
+  .ocrtext{margin-top:10px;font-size:12px;color:var(--muted);white-space:pre-wrap;max-height:140px;overflow:auto;background:#fafbfd;border:1px solid var(--line);border-radius:8px;padding:8px;display:none}
+  /* form */
+  label{display:block;font-size:12px;color:var(--muted);margin:12px 0 4px;font-weight:600}
+  label .req-star{color:var(--err);font-weight:bold;margin-left:2px}
+  input[type=text]{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;transition:border-color .15s, background-color .15s}
+  input[type=text]:focus{outline:2px solid #bcd0fb;border-color:var(--accent)}
+  .lockline{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:4px}
+  /* Type Rows list styling */
+  .type-rows-container{display:flex;flex-direction:column;gap:6px;margin-top:6px;padding:4px;border-radius:10px;border:1px solid transparent;transition:all .15s ease}
+  .type-rows-container.is-invalid{border:2px solid var(--err) !important;background-color:var(--err-bg) !important}
+  .type-row{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:8px;border:1.5px solid transparent;background:#fff;transition:all .15s ease}
+  .type-row:hover{background:#f8fafc;border-color:#e2e8f0}
+  .type-row.sel{background:#eff6ff;border-color:#93c5fd}
+  .type-row .path-input{flex:1;padding:7px 10px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .type-row.sel .path-input{border-color:#bfdbfe}
+  .type-row .pick-dir-btn{padding:5px 8px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid var(--line);background:#f8fafc;color:var(--muted);border-radius:6px;cursor:pointer;transition:all .15s ease}
+  .type-row .pick-dir-btn:hover{background:#eef2ff;color:var(--accent-d);border-color:#a5b4fc}
+  .type-row .type-btn{width:140px;flex-shrink:0;text-align:center;font-size:12px;font-weight:600;padding:7px 10px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;cursor:pointer;user-select:none;transition:all .15s ease}
+  .type-row .type-btn:hover{background:#e0e7ff;border-color:#a5b4fc}
+  .type-row.sel .type-btn{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;box-shadow:0 2px 4px rgba(37,99,235,0.2)}
+
+  /* Validation styles */
+  .is-invalid{border:2px solid var(--err) !important;background-color:var(--err-bg) !important;box-shadow:0 0 0 3px rgba(220,38,38,0.12) !important}
+
+  /* Preview Name & Path Box */
+  .preview-card{margin-top:14px;background:#f0f6ff;border:1px dashed #a9c5fb;border-radius:8px;padding:12px;font-size:13px;line-height:1.5}
+  .preview-card .label-sm{font-size:11px;text-transform:uppercase;color:var(--muted);font-weight:700;letter-spacing:.03em;margin-bottom:2px}
+  .preview-card .prev-row{margin-bottom:6px}
+  .preview-card .prev-row:last-child{margin-bottom:0}
+  .preview-card b{word-break:break-all;color:var(--ink)}
+  .preview-card b.highlight-name{color:var(--accent-d)}
+  .preview-card b.highlight-path{color:#0d9488}
+  .preview-card b.missing{color:var(--err)}
+
+  .status{margin-top:10px;font-size:13px;min-height:18px;font-weight:500}
+  .status.ok{color:var(--ok)} .status.err{color:var(--err);font-weight:600} .status.warn{color:var(--warn)}
+  .banner{background:#fff7ed;border:1px solid #fed7aa;color:#9a3412;border-radius:10px;padding:10px 14px;margin:14px 14px 0;font-size:13px;display:none}
+  
+  /* context menu */
+  .ctxmenu{position:fixed;z-index:9999;min-width:214px;background:#fff;border:1px solid var(--line);border-radius:10px;box-shadow:0 14px 44px rgba(15,23,42,.20);padding:6px;font-size:14px;user-select:none}
+  .ctxmenu .hd{font-size:11px;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:6px 10px 4px;max-width:220px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .ctxmenu .it{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:8px 10px;border-radius:7px;cursor:pointer;color:var(--ink)}
+  .ctxmenu .it:hover{background:#eef3fb}
+  .ctxmenu .it.disabled{color:#b6bdc9;pointer-events:none}
+  .ctxmenu .it .k{font-size:12px;color:var(--muted)}
+  .ctxmenu .sep{height:1px;background:var(--line);margin:5px 4px}
+  /* Modal popup window for history */
+  .modal-backdrop {
+    position: fixed; top: 0; left: 0; right: 0; bottom: 0;
+    background: rgba(15, 23, 42, 0.45);
+    backdrop-filter: blur(4px);
+    z-index: 10000;
+    display: flex; align-items: center; justify-content: center;
+    padding: 16px;
+    opacity: 0; pointer-events: none;
+    transition: opacity 0.2s ease;
+  }
+  .modal-backdrop.active {
+    opacity: 1; pointer-events: auto;
+  }
+  .modal-dialog {
+    background: #fff;
+    border-radius: 12px;
+    border: 1px solid var(--line);
+    box-shadow: 0 20px 25px -5px rgba(0, 0, 0, 0.15), 0 8px 10px -6px rgba(0, 0, 0, 0.1);
+    width: 100%; max-width: 640px;
+    max-height: 80vh;
+    display: flex; flex-direction: column;
+    overflow: hidden;
+    transform: translateY(10px);
+    transition: transform 0.2s ease;
+  }
+  .modal-backdrop.active .modal-dialog {
+    transform: translateY(0);
+  }
+  .modal-header {
+    padding: 14px 18px;
+    border-bottom: 1px solid var(--line);
+    display: flex; align-items: center; justify-content: space-between;
+    background: #f8fafc;
+  }
+  .modal-header h2 {
+    font-size: 15px; font-weight: 700; margin: 0; color: var(--ink); text-transform: none; letter-spacing: normal;
+  }
+  .modal-close {
+    background: none; border: none; font-size: 22px; font-weight: bold; color: var(--muted); cursor: pointer; padding: 0 6px; border-radius: 6px; line-height: 1;
+  }
+  .modal-close:hover { background: #e2e8f0; color: var(--ink); }
+  .modal-body {
+    padding: 16px; overflow-y: auto; flex: 1; min-height: 180px; background: #fff;
+  }
+  .modal-footer {
+    padding: 12px 18px; border-top: 1px solid var(--line); background: #f8fafc; display: flex; justify-content: space-between; align-items: center;
+  }
+  .history-item {
+    background: #f8fafc; border: 1px solid var(--line); border-radius: 8px; padding: 12px 14px; margin-bottom: 10px; display: flex; flex-direction: column; gap: 6px; transition: all 0.15s ease;
+  }
+  .history-item:hover { border-color: #cbd5e1; background: #fff; box-shadow: 0 2px 6px rgba(0,0,0,0.04); }
+  .history-header { display: flex; align-items: center; justify-content: space-between; gap: 8px; font-size: 12px; }
+  .history-type-badge { background: #eff6ff; color: var(--accent-d); font-weight: 700; padding: 2px 8px; border-radius: 6px; border: 1px solid #bfdbfe; font-size: 11px; }
+  .history-time { color: var(--muted); font-size: 11px; }
+  .history-files { font-size: 13px; font-weight: 600; color: var(--ink); word-break: break-all; }
+  .history-path { font-size: 12px; color: var(--muted); word-break: break-all; display: flex; align-items: center; gap: 6px; margin-top: 2px; }
+  .history-actions { display: flex; gap: 8px; margin-top: 4px; }
+  .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+</style>
+</head>
+<body>
+<header>
+  <h1>Szkennelt dokumentum átnevező és áthelyező</h1>
+  <span class="sub">OCR támogatás, automatikus áthelyezés mappák szerint.</span>
+  <div class="header-controls">
+    <div class="year-select-wrap">
+      <label for="yearSelect">Év:</label>
+      <select id="yearSelect">
+        <option value="2024">2024</option>
+        <option value="2025">2025</option>
+        <option value="2026">2026</option>
+        <option value="2027">2027</option>
+        <option value="2028">2028</option>
+        <option value="2029">2029</option>
+        <option value="2030">2030</option>
+      </select>
+    </div>
+    <button id="historyBtn" type="button">Előzmény</button>
+    <button id="resumeBtn" class="primary" style="display:none"></button>
+    <button id="pickBtn" class="primary">Mappa kiválasztása</button>
+  </div>
+  <span id="counter" class="sub"></span>
+</header>
+
+<!-- ELŐZMÉNYEK MODAL -->
+<div id="historyModal" class="modal-backdrop">
+  <div class="modal-dialog">
+    <div class="modal-header">
+      <div>
+        <h2 style="margin:0;font-size:15px;font-weight:700">Átnevezési és áthelyezési előzmények</h2>
+        <span class="sub" style="font-size:11px;color:var(--muted)">Részletes adatok & JSON API export (GitHub / Netlify kompatibilis)</span>
+      </div>
+      <button type="button" class="modal-close" id="closeHistoryBtn" title="Bezárás">&times;</button>
+    </div>
+    <div class="modal-body" id="historyListContainer">
+      <!-- Dinamikus előzmény lista -->
+    </div>
+    <div class="modal-footer">
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" id="exportHistoryBtn" class="btn-sm" title="Előzmények letöltése JSON fájlként (GitHub / Netlify API-hoz)">📥 JSON Export</button>
+        <button type="button" id="importHistoryBtn" class="btn-sm" title="JSON előzmények betöltése">📤 JSON Import</button>
+        <input type="file" id="importHistoryInput" accept=".json" style="display:none" />
+      </div>
+      <div style="display:flex;gap:8px;align-items:center;">
+        <button type="button" id="clearHistoryBtn" style="color:var(--err);border-color:#fca5a5" class="btn-sm">Törlés</button>
+        <button type="button" id="closeHistoryFooterBtn" class="primary btn-sm">Bezárás</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="wrap">
+  <!-- FÁJLLISTA -->
+  <div class="panel" id="filePanel">
+    <h2>Fájlok</h2>
+    <div class="pbody">
+      <ul id="fileList"><li class="empty" style="color:var(--muted);cursor:default">Válassz mappát fent.</li></ul>
+    </div>
+  </div>
+
+  <!-- ELŐNÉZET + OCR -->
+  <div class="panel">
+    <h2>Előnézet</h2>
+    <div class="pbody">
+      <div id="previewBox">
+        <div id="previewStage"></div>
+        <div class="empty" id="previewEmpty">Itt jelenik meg a kiválasztott kép / PDF / PSD első oldala.</div>
+        <div class="zoomctl" id="zoomCtl" style="display:none">
+          <button id="zoomOut" title="Kicsinyítés" type="button">−</button>
+          <button id="zoomIn" title="Nagyítás" type="button">+</button>
+        </div>
+      </div>
+      <div class="ocrbar">
+        <button id="ocrBtn" disabled>OCR olvasás</button>
+        <div class="prog"><i id="progBar"></i></div>
+        <span id="ocrPct" class="sub"></span>
+        <button id="toggleText" style="margin-left:auto">Nyers szöveg</button>
+      </div>
+      <div id="ocrText" class="ocrtext"></div>
+    </div>
+  </div>
+
+  <!-- ŰRLAP -->
+  <div class="panel">
+    <h2>Adatok</h2>
+    <div class="pbody">
+
+    <label id="lblFName">Név <span class="req-star">*</span></label>
+    <input type="text" id="fName" placeholder="pl. Kovács János" autocomplete="off"/>
+
+    <label id="lblFType">Dokumentum típusa és célmappája <span class="req-star">*</span></label>
+    <div class="type-rows-container" id="typeRowsContainer"></div>
+
+    <label id="lblFValid">Érvényesség <span id="validReqBadge"></span></label>
+    <input type="text" id="fValid" placeholder="2026.07.20-07.21" autocomplete="off"/>
+
+    <label style="margin-top:18px">Egyben (gyors átnevezés)</label>
+    <input type="text" id="fWhole" placeholder="Teljes fájlnév egyben, majd Enter" autocomplete="off"/>
+
+    <div class="preview-card" id="namePreview">
+      <div class="prev-row">
+        <div class="label-sm">Új fájlnév:</div>
+        <b id="prevFileName" class="highlight-name">—</b>
+      </div>
+      <div class="prev-row">
+        <div class="label-sm">Célmappa:</div>
+        <b id="prevFilePath" class="highlight-path">—</b>
+      </div>
+    </div>
+
+    <button id="renameBtn" class="primary btn-finish" style="width:100%;margin-top:12px" disabled>Kész</button>
+    <button id="skipBtn" style="width:100%;margin-top:8px" disabled>Kihagyás / következő</button>
+    <div id="status" class="status"></div>
+    </div>
+  </div>
+</div>
+
+<!-- Külső könyvtárak -->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/ag-psd/dist/bundle.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  // ---- Konfiguráció -------------------------------------------------
+  const DEFAULT_TYPES = [
+    "tp",
+    "munkába járás",
+    "pótszabi",
+    "szerződés csomag",
+    "országbérlet",
+    "vármegyebérlet",
+    "adóelőleg",
+    "összevont adóelőleg"
+  ];
+
+  // Csak ezeknél kötelező az érvényesség
+  const VALIDITY_REQUIRED_TYPES = ["tp", "országbérlet", "vármegyebérlet"];
+
+  const TIME_BUCKETS = [
+    { max: 30,       label: "Elmúlt 30 percben" },
+    { max: 60,       label: "Elmúlt 1 órában" },
+    { max: 120,      label: "Elmúlt 2 órában" },
+    { max: 240,      label: "Elmúlt 4 órában" },
+    { max: 420,      label: "Elmúlt 7 órában" },
+    { max: 1440,     label: "Elmúlt 1 napban" },
+    { max: 2880,     label: "Elmúlt 2 napban" },
+    { max: Infinity, label: "3 napnál régebbiek" },
+  ];
+  function bucketIndex(mtime){
+    const ageMin = (Date.now() - mtime) / 60000;
+    for(let i=0;i<TIME_BUCKETS.length;i++){ if(ageMin <= TIME_BUCKETS[i].max) return i; }
+    return TIME_BUCKETS.length-1;
+  }
+
+  const _coll = new Intl.Collator("hu", { numeric:true, sensitivity:"base" });
+  const naturalCompare = (a,b)=> _coll.compare(a,b);
+  const IMG_EXT    = ["jpg","jpeg","jfif","png","webp","bmp","gif","avif","svg","ico"];
+  const CANVAS_EXT = ["pdf","psd","tif","tiff"];
+  const NOPREVIEW  = ["heic","heif"];
+  const OK_EXT     = [...IMG_EXT, ...CANVAS_EXT, ...NOPREVIEW];
+  const HU_MONTHS  = ["január","február","március","április","május","június","július","augusztus","szeptember","október","november","december"];
+
+  if (window.pdfjsLib) {
+    pdfjsLib.GlobalWorkerOptions.workerSrc = "https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js";
+  }
+
+  // ---- Állapot ------------------------------------------------------
+  let dirHandle = null;
+  let files = [];
+  let curIdx = -1;
+  let ocrSource = null;
+  let ocrWorker = null;
+  let selectedType = "";
+  let docPaths = {};
+  let selectedYear = String(new Date().getFullYear());
+
+  // Betöltjük a mentett évet és célmappa-útvonalakat
+  try {
+    const savedYear = localStorage.getItem("scanRenamer_year");
+    if (savedYear) selectedYear = savedYear;
+    const savedPaths = localStorage.getItem("scanRenamer_docPaths");
+    if (savedPaths) docPaths = JSON.parse(savedPaths);
+  } catch(_) {}
+
+  // ---- Elemek -------------------------------------------------------
+  const $ = id => document.getElementById(id);
+  const el = {
+    pick:$("pickBtn"), resume:$("resumeBtn"), list:$("fileList"), counter:$("counter"), banner:$("banner"),
+    yearSelect:$("yearSelect"),
+    prev:$("previewBox"), ocr:$("ocrBtn"), prog:$("progBar"), pct:$("ocrPct"),
+    ocrText:$("ocrText"), toggleText:$("toggleText"),
+    name:$("fName"), typeContainer:$("typeRowsContainer"),
+    valid:$("fValid"), validReqBadge:$("validReqBadge"), whole:$("fWhole"),
+    namePrev:$("namePreview"), prevFileName:$("prevFileName"), prevFilePath:$("prevFilePath"),
+    rename:$("renameBtn"), skip:$("skipBtn"), status:$("status")
+  };
+
+  // ---- Év választó inicializálás ----------------------------------
+  if (el.yearSelect) {
+    if (!Array.from(el.yearSelect.options).some(o => o.value === selectedYear)) {
+      const opt = document.createElement("option");
+      opt.value = selectedYear; opt.textContent = selectedYear;
+      el.yearSelect.appendChild(opt);
+    }
+    el.yearSelect.value = selectedYear;
+    el.yearSelect.addEventListener("change", () => {
+      selectedYear = el.yearSelect.value;
+      localStorage.setItem("scanRenamer_year", selectedYear);
+      if (VALIDITY_REQUIRED_TYPES.includes(selectedType)) {
+        if (!el.valid.value.trim() || /^\d{4}\.?$/.test(el.valid.value.trim())) {
+          el.valid.value = `${selectedYear}.`;
+        }
+      } else {
+        el.valid.value = "";
+      }
+      updatePreview();
+    });
+  }
+
+  // ---- Típus-sorok & Célmappák -------------------------------------
+  function slugify(s){ return s.replace(/\s+/g,"_").replace(/[^a-z0-9_]/gi,""); }
+
+  function buildTypeRows(){
+    el.typeContainer.innerHTML = "";
+    DEFAULT_TYPES.forEach(t => {
+      const row = document.createElement("div");
+      row.className = "type-row" + (t === selectedType ? " sel" : "");
+      row.id = "type-row-" + slugify(t);
+
+      const input = document.createElement("input");
+      input.type = "text";
+      input.className = "path-input";
+      input.id = "path-input-" + slugify(t);
+      input.placeholder = "copy the path to move";
+      input.value = docPaths[t] || "";
+      input.autocomplete = "off";
+
+      const pickBtn = document.createElement("button");
+      pickBtn.type = "button";
+      pickBtn.className = "pick-dir-btn";
+      pickBtn.textContent = "Mappa...";
+      pickBtn.title = "Célmappa kiválasztása a gépen";
+      pickBtn.onclick = (e) => {
+        e.stopPropagation();
+        pickTargetFolderForType(t);
+      };
+
+      const btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "type-btn";
+      btn.textContent = t;
+
+      const selectThisType = () => {
+        if (selectedType !== t) {
+          selectedType = t;
+          updateTypeRowSelection();
+          updateValidityRequirement();
+          clearValidationErrors();
+          updatePreview();
+        }
+      };
+
+      btn.onclick = selectThisType;
+      input.onfocus = selectThisType;
+      const handleInput = () => {
+        docPaths[t] = input.value.trim();
+        saveDocPaths();
+        if (selectedType !== t) {
+          selectedType = t;
+          updateTypeRowSelection();
+          updateValidityRequirement();
+        }
+        clearValidationErrors();
+        updatePreview();
+      };
+      input.oninput = handleInput;
+      input.onpaste = () => setTimeout(handleInput, 10);
+      input.onkeydown = (e) => {
+        if (e.key === "Enter") {
+          e.preventDefault();
+          handleInput();
+          if (!el.rename.disabled) doFinish();
+        }
+      };
+
+      row.appendChild(input);
+      row.appendChild(pickBtn);
+      row.appendChild(btn);
+      el.typeContainer.appendChild(row);
+    });
+  }
+
+  async function pickTargetFolderForType(t){
+    if(!window.showDirectoryPicker){
+      setStatus("A böngésző nem támogatja a mappa választót.", "warn");
+      return;
+    }
+    try{
+      const handle = await window.showDirectoryPicker({ mode:"readwrite" });
+      const perm = await handle.requestPermission({ mode:"readwrite" });
+      if(perm === "granted"){
+        await idbSet("docDir_" + t, handle);
+        const folderName = handle.name;
+        docPaths[t] = folderName;
+        const inp = $("path-input-" + slugify(t));
+        if(inp) inp.value = folderName;
+        saveDocPaths();
+        selectedType = t;
+        updateTypeRowSelection();
+        clearValidationErrors();
+        updatePreview();
+        setStatus("Célmappa csatlakoztatva a(z) '" + t + "' típushoz: " + folderName, "ok");
+      }
+    }catch(err){
+      if(err && err.name==="AbortError") return;
+      setStatus("Mappaválasztás hiba: "+(err&&err.message||err), "warn");
+    }
+  }
+
+  function updateTypeRowSelection(){
+    DEFAULT_TYPES.forEach(t => {
+      const row = $("type-row-" + slugify(t));
+      if (row) {
+        if (t === selectedType) row.classList.add("sel");
+        else row.classList.remove("sel");
+      }
+    });
+  }
+
+  function saveDocPaths(){
+    try {
+      localStorage.setItem("scanRenamer_docPaths", JSON.stringify(docPaths));
+    } catch(_) {}
+  }
+
+  function updateValidityRequirement(){
+    const req = VALIDITY_REQUIRED_TYPES.includes(selectedType);
+    if(req){
+      el.validReqBadge.className = "req-star";
+      el.validReqBadge.textContent = "* (amelyikhez kell)";
+      if(!el.valid.value.trim()){
+        el.valid.value = `${selectedYear}.`;
+      }
+    } else {
+      el.validReqBadge.className = "sub";
+      el.validReqBadge.textContent = "(amelyikhez kell)";
+      el.valid.value = "";
+    }
+  }
+
+  buildTypeRows();
+  updateValidityRequirement();
+
+  function currentType(){
+    return selectedType || "";
+  }
+
+  // ---- Segéd: figyelmeztető sáv -------------------------------------
+  function banner(msg){ if(msg){ el.banner.textContent=msg; el.banner.style.display="block"; } else el.banner.style.display="none"; }
+  function setStatus(msg,kind){ el.status.textContent=msg||""; el.status.className="status"+(kind?" "+kind:""); }
+
+  function clearValidationErrors(){
+    if(el.name) el.name.classList.remove("is-invalid");
+    if(el.valid) el.valid.classList.remove("is-invalid");
+    if(el.typeContainer) el.typeContainer.classList.remove("is-invalid");
+    DEFAULT_TYPES.forEach(t => {
+      const inp = $("path-input-" + slugify(t));
+      if(inp) inp.classList.remove("is-invalid");
+    });
+  }
+
+  // ---- Mappa kiválasztása ------------------------------------------
+  el.pick.onclick = pickFolder;
+  async function pickFolder(){
+    if(!window.showDirectoryPicker){
+      banner("Ez a böngésző nem támogatja a mappa-elérést. Nyisd meg Microsoft Edge vagy Google Chrome böngészőben.");
+      return;
+    }
+    try{
+      dirHandle = await window.showDirectoryPicker({ mode:"readwrite" });
+      const perm = await dirHandle.requestPermission({ mode:"readwrite" });
+      if(perm!=="granted"){ banner("Nincs írási engedély a mappához – az áthelyezés nem fog működni."); }
+      else banner("");
+      idbSet("lastDir", dirHandle).catch(()=>{});
+      hideRestoreButton();
+      await listFiles();
+    }catch(err){
+      if(err && err.name==="AbortError") return;
+      banner("Nem sikerült megnyitni a mappát: "+(err&&err.message||err));
+    }
+  }
+
+  async function listFiles(){
+    setStatus("Fájlok beolvasása…");
+    files = [];
+    let scanFolderHandle = dirHandle;
+    try {
+      const subScan = await dirHandle.getDirectoryHandle("scan");
+      if (subScan) scanFolderHandle = subScan;
+    } catch (_) {}
+
+    for await (const entry of scanFolderHandle.values()){
+      if(entry.kind!=="file") continue;
+      const ext = entry.name.split(".").pop().toLowerCase();
+      if(!OK_EXT.includes(ext)) continue;
+      let mtime = 0;
+      try{ const f = await entry.getFile(); mtime = f.lastModified || 0; }catch(_){}
+      files.push({ handle:entry, parentHandle:scanFolderHandle, name:entry.name, done:false, mtime, bucket:0 });
+    }
+    files.forEach(f=>{ f.bucket = bucketIndex(f.mtime); });
+    files.sort((a,b)=> a.bucket - b.bucket || naturalCompare(a.name, b.name));
+    curIdx = -1;
+    renderList();
+    setStatus("");
+    if(files.length) selectFile(0);
+    else setStatus("Nincs kép/PDF a mappában.","warn");
+  }
+
+  function renderList(){
+    el.list.innerHTML = "";
+    if(!files.length){
+      el.list.innerHTML = '<li class="empty" style="color:var(--muted);cursor:default">Üres.</li>';
+      el.counter.textContent = "";
+      return;
+    }
+    const groups = TIME_BUCKETS.map(()=>[]);
+    files.forEach((f,i)=>{ groups[f.bucket==null?bucketIndex(f.mtime):f.bucket].push(i); });
+    groups.forEach((idxs, gi)=>{
+      if(!idxs.length) return;
+      const head = document.createElement("li");
+      head.className = "group";
+      head.textContent = `${TIME_BUCKETS[gi].label} · ${idxs.length}`;
+      el.list.appendChild(head);
+      idxs.forEach(i=>{
+        const f = files[i];
+        const li = document.createElement("li");
+        li.className = (i===curIdx?"active ":"")+(f.done?"done":"");
+        li.dataset.idx = i;
+        li.innerHTML = '<span class="dot"></span>';
+        const t = document.createElement("span");
+        t.textContent = f.name;
+        li.appendChild(t);
+        li.onclick = ()=>selectFile(i);
+        el.list.appendChild(li);
+      });
+    });
+    const doneN = files.filter(f=>f.done).length;
+    el.counter.textContent = `${doneN} / ${files.length} kész`;
+  }
+
+  // ---- Fájl kiválasztás + előnézet ---------------------------------
+  async function selectFile(i){
+    curIdx = i;
+    renderList();
+    resetForm();
+    clearValidationErrors();
+    el.ocr.disabled = true; el.rename.disabled=true; el.skip.disabled=false;
+    setStatus("Előnézet betöltése…");
+    ocrSource = null;
+    clearPreview();
+    try{
+      const f = files[i];
+      const file = await f.handle.getFile();
+      const ext = f.name.split(".").pop().toLowerCase();
+      if(ext==="pdf"){
+        const canvas = await renderPdf(file);  ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
+      }else if(ext==="psd"){
+        const canvas = await renderPsd(file);  ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
+      }else if(ext==="tif" || ext==="tiff"){
+        const canvas = await renderTiff(file); ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
+      }else if(IMG_EXT.includes(ext)){
+        const url = URL.createObjectURL(file);
+        const img = new Image(); img.src = url; await img.decode().catch(()=>{});
+        ocrSource = url;
+        mountZoomable(img, img.naturalWidth||img.width||1, img.naturalHeight||img.height||1);
+        el.ocr.disabled=false;
+      }else{
+        showEmpty("Ehhez a formátumhoz (<b>." + ext + "</b>) nincs előnézet.<br>A fájl így is feldolgozható.");
+        el.ocr.disabled=true;
+      }
+      setStatus("");
+    }catch(err){
+      showEmpty("Nem sikerült megnyitni a fájlt előnézetre.<br>A fájl így is átnevezhető.");
+      setStatus("Előnézet hiba: "+(err&&err.message||err),"warn");
+    }
+  }
+
+  async function renderPdf(file){
+    const buf = await file.arrayBuffer();
+    const pdf = await pdfjsLib.getDocument({ data:buf }).promise;
+    const page = await pdf.getPage(1);
+    const viewport = page.getViewport({ scale:2 });
+    const canvas = document.createElement("canvas");
+    canvas.width = viewport.width; canvas.height = viewport.height;
+    await page.render({ canvasContext:canvas.getContext("2d"), viewport }).promise;
+    return canvas;
+  }
+
+  async function renderPsd(file){
+    if(!window.agPsd) throw new Error("A PSD-olvasó nem töltődött be.");
+    const buf = await file.arrayBuffer();
+    const psd = window.agPsd.readPsd(buf, { skipLayerImageData:true, skipThumbnail:true });
+    const canvas = psd.canvas;
+    if(!canvas) throw new Error("A PSD nem tartalmaz megjeleníthető képet.");
+    return canvas;
+  }
+  async function renderTiff(file){
+    if(!window.UTIF) throw new Error("A TIFF-olvasó nem töltődött be.");
+    const buf = await file.arrayBuffer();
+    const ifds = window.UTIF.decode(buf);
+    window.UTIF.decodeImage(buf, ifds[0]);
+    const rgba = window.UTIF.toRGBA8(ifds[0]);
+    const canvas = document.createElement("canvas");
+    canvas.width = ifds[0].width; canvas.height = ifds[0].height;
+    canvas.getContext("2d").putImageData(new ImageData(new Uint8ClampedArray(rgba), canvas.width, canvas.height), 0, 0);
+    return canvas;
+  }
+
+  // ---- Előnézet nagyítás + pásztázás -------------------------------
+  let zoomable=false, scale=1, baseFit=1, tx=0, ty=0, panning=false, panLX=0, panLY=0;
+  const stageEl = ()=> $("previewStage");
+  function applyTransform(){ stageEl().style.transform = `translate(${tx}px,${ty}px) scale(${scale})`; }
+  function fitPreview(w,h){
+    const r = el.prev.getBoundingClientRect(), bw=r.width||1, bh=r.height||1;
+    baseFit = Math.min(bw/w, bh/h) || 1;
+    scale = baseFit; tx = (bw - w*scale)/2; ty = (bh - h*scale)/2;
+    applyTransform();
+  }
+  function zoomAt(px,py,factor){
+    if(!zoomable) return;
+    const min=baseFit*0.5, max=baseFit*14;
+    const s2=Math.min(max, Math.max(min, scale*factor));
+    if(Math.abs(s2-scale)<1e-4) return;
+    const cx=(px-tx)/scale, cy=(py-ty)/scale;
+    scale=s2; tx=px-cx*scale; ty=py-cy*scale; applyTransform();
+  }
+  function clearPreview(){
+    const s=stageEl(); if(s){ s.innerHTML=""; s.style.display="none"; }
+    const e=$("previewEmpty"); if(e) e.style.display="none";
+    el.prev.classList.remove("zoomable","grabbing");
+    const z=$("zoomCtl"); if(z) z.style.display="none";
+    zoomable=false; panning=false;
+  }
+  function showEmpty(html){ clearPreview(); const e=$("previewEmpty"); e.innerHTML=html; e.style.display="block"; }
+  function mountZoomable(node,w,h){
+    const s=stageEl(); s.innerHTML=""; s.appendChild(node);
+    const cw=w||node.width||node.naturalWidth||1, ch=h||node.height||node.naturalHeight||1;
+    s.style.width=cw+"px"; s.style.height=ch+"px"; s.style.display="block";
+    $("previewEmpty").style.display="none";
+    el.prev.classList.add("zoomable"); $("zoomCtl").style.display="flex"; zoomable=true;
+    fitPreview(cw,ch);
+  }
+  $("zoomIn").onclick  = ()=>{ const r=el.prev.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1.25); };
+  $("zoomOut").onclick = ()=>{ const r=el.prev.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,0.8); };
+  el.prev.addEventListener("wheel", e=>{
+    if(!zoomable || !(e.ctrlKey||e.metaKey)) return;
+    e.preventDefault();
+    const r=el.prev.getBoundingClientRect();
+    zoomAt(e.clientX-r.left, e.clientY-r.top, e.deltaY<0?1.15:1/1.15);
+  }, { passive:false });
+  el.prev.addEventListener("dblclick", e=>{
+    if(!zoomable || (e.target.closest && e.target.closest(".zoomctl"))) return;
+    const r=el.prev.getBoundingClientRect();
+    zoomAt(e.clientX-r.left, e.clientY-r.top, 1.8);
+  });
+  el.prev.addEventListener("pointerdown", e=>{
+    if(!zoomable || e.button!==0 || (e.target.closest && e.target.closest(".zoomctl"))) return;
+    panning=true; panLX=e.clientX; panLY=e.clientY;
+    el.prev.classList.add("grabbing");
+    try{ el.prev.setPointerCapture(e.pointerId); }catch(_){}
+  });
+  el.prev.addEventListener("pointermove", e=>{
+    if(!panning) return;
+    tx += e.clientX-panLX; ty += e.clientY-panLY; panLX=e.clientX; panLY=e.clientY; applyTransform();
+  });
+  function endPan(){ panning=false; el.prev.classList.remove("grabbing"); }
+  el.prev.addEventListener("pointerup", endPan);
+  el.prev.addEventListener("pointercancel", endPan);
+  try{
+    new ResizeObserver(()=>{
+      if(!zoomable) return;
+      if(Math.abs(scale-baseFit)<1e-3){
+        const s=stageEl();
+        fitPreview(parseFloat(s.style.width)||1, parseFloat(s.style.height)||1);
+      }
+    }).observe(el.prev);
+  }catch(_){}
+
+  // ---- OCR ----------------------------------------------------------
+  el.ocr.onclick = runOCR;
+  el.toggleText.onclick = ()=>{ el.ocrText.style.display = el.ocrText.style.display==="block"?"none":"block"; };
+
+  async function runOCR(){
+    if(!ocrSource){ return; }
+    el.ocr.disabled = true;
+    setStatus("OCR fut…");
+    el.prog.style.width="0%"; el.pct.textContent="";
+    try{
+      if(!ocrWorker){
+        ocrWorker = await Tesseract.createWorker("hun+eng", 1, {
+          logger:m=>{
+            if(m.status==="recognizing text"){
+              const p = Math.round(m.progress*100);
+              el.prog.style.width=p+"%"; el.pct.textContent=p+"%";
+            }
+          }
+        });
+      }
+      const { data } = await ocrWorker.recognize(ocrSource);
+      const text = data.text || "";
+      el.ocrText.textContent = text.trim() || "(nem ismert fel szöveget)";
+      fillFromText(text);
+      el.prog.style.width="100%"; el.pct.textContent="100%";
+      setStatus("OCR kész – ellenőrizd az adatokat mentés előtt.","ok");
+    }catch(err){
+      setStatus("OCR hiba: "+(err&&err.message||err),"err");
+    }finally{
+      el.ocr.disabled = false;
+    }
+  }
+
+  // ---- Szöveg -> mezők ------------------------------------------------
+  function fillFromText(text){
+    if(!el.name.value.trim()){
+      const nm = guessName(text);
+      if(nm){ el.name.value = nm; el.name.classList.remove("is-invalid"); }
+    }
+    if(!el.valid.value.trim()){
+      const v = findValidity(text);
+      if(v){ el.valid.value = v; el.valid.classList.remove("is-invalid"); }
+    }
+    updatePreview();
+  }
+
+  function guessName(text){
+    const lines = text.split(/\r?\n/).map(s=>s.trim()).filter(Boolean);
+    for(const ln of lines){
+      const m = ln.match(/n[eé]v\s*[:\-]?\s*([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]+){1,3})/);
+      if(m) return clean(m[1]);
+    }
+    for(const ln of lines){
+      if(/\d/.test(ln)) continue;
+      const m = ln.match(/^([A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]{1,}(?:\s+[A-ZÁÉÍÓÖŐÚÜŰ][a-záéíóöőúüű]{1,}){1,2})$/);
+      if(m) return clean(m[1]);
+    }
+    return "";
+  }
+  function clean(s){ return s.replace(/\s+/g," ").trim(); }
+
+  function findValidity(text){
+    const reRange = /(\d{4})[.\-\/\s]{1,3}(\d{1,2})[.\-\/\s]{1,3}(\d{1,2})[\s._\-–—~]{1,4}(?:(\d{4})[.\-\/\s]{1,3})?(\d{1,2})(?:[.\-\/\s]{1,3}(\d{1,2}))?/;
+    const m = reRange.exec(text);
+    if(m){
+      const from = mkDate(m[1], m[2], m[3]);
+      let to = null;
+      if(m[6]!==undefined)   to = mkDate(m[4]||m[1], m[5], m[6]);
+      else if(!m[4])         to = mkDate(m[1], m[2], m[5]);
+      if(from && to){
+        const cmp = (to.y-from.y)||(to.m-from.m)||(to.d-from.d);
+        if(m[4] || cmp>=0) return fmtRange(from, to, !!m[4]);
+      }
+    }
+    const ds = allDates(text);
+    if(ds.length>=2) return fmtRange(ds[0], ds[ds.length-1], ds[0].y!==ds[ds.length-1].y);
+    if(ds.length===1) return fmtDate(ds[0]);
+    return "";
+  }
+
+  function allDates(text){
+    const out = []; let m;
+    const reNum = /(\d{4})[.\-\/\s]{1,3}(\d{1,2})[.\-\/\s]{1,3}(\d{1,2})/g;
+    while((m=reNum.exec(text))!==null){ const d=mkDate(m[1],m[2],m[3]); if(d) out.push(d); }
+    const reHu = /(\d{4})\.?\s*(jan(?:uár)?|feb(?:ruár)?|már(?:cius)?|ápr(?:ilis)?|máj(?:us)?|jún(?:ius)?|júl(?:ius)?|aug(?:usztus)?|szep(?:tember)?|okt(?:óber)?|nov(?:ember)?|dec(?:ember)?)\.?\s*(\d{1,2})/gi;
+    while((m=reHu.exec(text))!==null){ const d=mkDate(m[1],huMonthIdx(m[2]),m[3]); if(d) out.push(d); }
+    const seen = new Set(), uniq = [];
+    for(const d of out){ const k=fmtDate(d); if(!seen.has(k)){ seen.add(k); uniq.push(d); } }
+    uniq.sort((a,b)=> (a.y-b.y)||(a.m-b.m)||(a.d-b.d));
+    return uniq;
+  }
+
+  function mkDate(y,mo,d){
+    y=+y; mo=+mo; d=+d;
+    if(!(mo>=1&&mo<=12)||!(d>=1&&d<=31)||!(y>=1990&&y<=2100)) return null;
+    return { y, m:mo, d };
+  }
+  const p2 = n => String(n).padStart(2,"0");
+  function fmtDate(x){ return `${x.y}.${p2(x.m)}.${p2(x.d)}`; }
+  function fmtRange(from, to, keepToYear){
+    const f = fmtDate(from);
+    const t = (keepToYear && to.y!==from.y) ? fmtDate(to) : `${p2(to.m)}.${p2(to.d)}`;
+    return `${f}-${t}`;
+  }
+  function huMonthIdx(s){
+    s = s.toLowerCase();
+    for(let i=0;i<HU_MONTHS.length;i++){ if(HU_MONTHS[i].startsWith(s.slice(0,3))) return i+1; }
+    return 0;
+  }
+
+  // ---- Fájlnév előnézet + sanitize ----------------------------------
+  [el.name, el.valid, el.whole].forEach(x=>x.addEventListener("input", () => {
+    x.classList.remove("is-invalid");
+    updatePreview();
+  }));
+  [el.name, el.valid, el.whole].forEach(x => {
+    x.addEventListener("keydown", e => {
+      if (e.key === "Enter") {
+        e.preventDefault();
+        if (!el.rename.disabled) doFinish();
+      }
+    });
+  });
+
+  function sanitizeValidity(v){
+    return v.replace(/[\\\/:*?"<>|]/g,"").replace(/\s+/g," ").trim();
+  }
+  function sanitize(s){
+    return s.replace(/[\\\/:*?"<>|]/g,"").replace(/\s+/g," ").replace(/\.+$/,"").trim();
+  }
+  function buildBaseName(){
+    const whole = el.whole.value.trim();
+    if(whole) return sanitize(whole);
+    const name = sanitize(el.name.value);
+    const type = sanitize(currentType());
+    const valid = sanitizeValidity(el.valid.value);
+    if(!name || !type) return "";
+    let base = `${name} ${type}`;
+    if(valid) base += ` ${valid}`;
+    return sanitize(base);
+  }
+  function extOf(fname){ const p=fname.split("."); return p.length>1 ? "."+p.pop().toLowerCase() : ""; }
+
+  function updatePreview(){
+    const base = buildBaseName();
+    const typeVal = currentType();
+    const targetPathVal = (typeVal && docPaths[typeVal] ? docPaths[typeVal] : "").trim();
+    const ok = !!base && curIdx>=0;
+    
+    if(ok){
+      el.prevFileName.textContent = base;
+      el.prevFileName.className = "highlight-name";
+    }else{
+      el.prevFileName.textContent = "—";
+      el.prevFileName.className = "missing";
+    }
+
+    if(targetPathVal){
+      el.prevFilePath.textContent = targetPathVal;
+      el.prevFilePath.className = "highlight-path";
+    } else {
+      el.prevFilePath.textContent = "(nincs célmappa megadva)";
+      el.prevFilePath.className = "missing";
+    }
+
+    el.rename.disabled = curIdx < 0;
+  }
+
+  // ---- Kész (Átnevezés és Áthelyezés) --------------------------------
+  el.rename.onclick = doFinish;
+  el.skip.onclick = ()=>{ const n=nextUndone(); if(n>=0) selectFile(n); };
+
+  async function doFinish(){
+    if(curIdx<0) return;
+    clearValidationErrors();
+
+    const f = files[curIdx];
+    const nameVal = el.name.value.trim();
+    const typeVal = currentType();
+    const pathVal = (typeVal && docPaths[typeVal] ? docPaths[typeVal] : "").trim();
+    const isValidRequired = VALIDITY_REQUIRED_TYPES.includes(typeVal);
+    const validVal = el.valid.value.trim();
+
+    let hasError = false;
+
+    if(!nameVal && !el.whole.value.trim()){
+      el.name.classList.add("is-invalid");
+      hasError = true;
+    }
+
+    if(!typeVal && !el.whole.value.trim()){
+      el.typeContainer.classList.add("is-invalid");
+      hasError = true;
+    }
+
+    if(typeVal && !pathVal && !el.whole.value.trim()){
+      const activePathInput = $("path-input-" + slugify(typeVal));
+      if(activePathInput) activePathInput.classList.add("is-invalid");
+      hasError = true;
+    }
+
+    if(isValidRequired && !validVal && !el.whole.value.trim()){
+      el.valid.classList.add("is-invalid");
+      hasError = true;
+    }
+
+    if(hasError){
+      setStatus("Töltsd ki a pirossal megjelölt kötelező mezőket!", "err");
+      return;
+    }
+
+    const base = buildBaseName();
+    const ext = extOf(f.name);
+    if(!base){ setStatus("Hiányzik a név vagy a típus.","err"); return; }
+
+    try{
+      setStatus("Fájl áthelyezése és átnevezése…");
+      const targetDirHandle = await getTargetDirectoryHandle(typeVal, pathVal);
+
+      if(!targetDirHandle){
+        const activePathInput = $("path-input-" + slugify(typeVal));
+        if(activePathInput) activePathInput.classList.add("is-invalid");
+        setStatus("Nem érhető el a célmappa! Ellenőrizd a megadott útvonalat.","err");
+        return;
+      }
+
+      const origName = f.name;
+      const targetFileName = await uniqueNameInDir(targetDirHandle, base, ext, f.handle);
+      await moveFileToDirectory(f.handle, targetDirHandle, targetFileName, f.parentHandle);
+
+      f.name = targetFileName;
+      markDone();
+
+      addHistoryEntry({
+        origName: origName,
+        newName: targetFileName,
+        personName: nameVal,
+        type: typeVal,
+        validity: validVal,
+        year: selectedYear,
+        targetPath: pathVal || targetDirHandle.name
+      });
+
+      setStatus("Sikeresen áthelyezve: " + targetFileName + " ➔ " + pathVal, "ok");
+      goNext();
+    }catch(err){
+      setStatus("Hiba az áthelyezés során: "+(err&&err.message||err),"err");
+    }
+  }
+
+  async function getTargetDirectoryHandle(typeVal, pathVal){
+    // 1. Mentett mappa elérése (Indexing / korábbi Mappa... választás)
+    try{
+      const savedHandle = await idbGet("docDir_" + typeVal);
+      if(savedHandle && typeof savedHandle.queryPermission === "function"){
+        let perm = await savedHandle.queryPermission({ mode:"readwrite" });
+        if(perm !== "granted"){
+          perm = await savedHandle.requestPermission({ mode:"readwrite" });
+        }
+        if(perm === "granted") return savedHandle;
+      }
+    }catch(_){}
+
+    if(!dirHandle) return null;
+
+    // 2. Célmappa nevének kinyerése
+    const rawPath = pathVal.trim();
+    const clean = rawPath.replace(/[\\/]+/g, "/");
+    const parts = clean.split("/").filter(p => p && !p.includes(":") && p !== ".");
+    let targetFolderName = parts.length ? parts[parts.length - 1] : typeVal;
+    if(!targetFolderName) targetFolderName = typeVal;
+
+    // 3. Meglévő mappa keresése dirHandle-ben (SOHA NEM HOZ LÉTRE ÚJ MAPPA-T: create: false)
+    try{
+      return await dirHandle.getDirectoryHandle(targetFolderName, { create: false });
+    }catch(_){}
+
+    // 4. Ha a nyitott mappán kívül van (pl. scan helyett PROHUMAN/tp), megnyitjuk a mappa-választót
+    if(window.showDirectoryPicker){
+      try {
+        setStatus(`Válaszd ki a(z) '${typeVal}' célmappát a gépeden (pl. D:\\CsSzabj\\PROHUMAN\\${targetFolderName})!`, "warn");
+        const handle = await window.showDirectoryPicker({ mode:"readwrite" });
+        const perm = await handle.requestPermission({ mode:"readwrite" });
+        if(perm === "granted"){
+          await idbSet("docDir_" + typeVal, handle);
+          const inp = $("path-input-" + slugify(typeVal));
+          if(inp) inp.value = handle.name;
+          docPaths[typeVal] = handle.name;
+          saveDocPaths();
+          return handle;
+        }
+      } catch(pickErr) {
+        console.warn("Mappaválasztás megszakítva:", pickErr);
+      }
+    }
+
+    return null;
+  }
+
+  async function moveFileToDirectory(fileHandle, targetDirHandle, newFileName, sourceDirHandle){
+    if(typeof fileHandle.move === "function"){
+      try{
+        await fileHandle.move(targetDirHandle, newFileName);
+        return;
+      }catch(err){
+        console.warn("Natív handle.move sikertelen, másolás+törlés próbálkozás:", err);
+      }
+    }
+
+    // Másolás + törlés fallback
+    const srcFile = await fileHandle.getFile();
+    const newFileHandle = await targetDirHandle.getFileHandle(newFileName, { create:true });
+    const writable = await newFileHandle.createWritable();
+    await writable.write(srcFile);
+    await writable.close();
+
+    const parent = sourceDirHandle || dirHandle;
+    try{
+      await parent.removeEntry(fileHandle.name);
+    }catch(delErr){
+      console.warn("Eredeti fájl eltávolítási hiba:", delErr);
+    }
+  }
+
+  async function sameEntry(a, b){
+    try{ if(a.isSameEntry) return await a.isSameEntry(b); }catch(_){}
+    return a.name.toLowerCase() === b.name.toLowerCase();
+  }
+
+  async function uniqueNameInDir(targetDirHandle, base, ext, selfHandle){
+    let candidate = base+ext, n=2;
+    while(true){
+      let existing=null;
+      try{ existing = await targetDirHandle.getFileHandle(candidate); }catch(_){ existing=null; }
+      if(!existing) return candidate;
+      if(selfHandle && (await sameEntry(existing, selfHandle))) return candidate;
+      candidate = `${base} (${n})${ext}`; n++;
+    }
+  }
+
+  function markDone(){ files[curIdx].done=true; renderList(); }
+  function nextUndone(){
+    for(let i=curIdx+1;i<files.length;i++) if(!files[i].done) return i;
+    for(let i=0;i<files.length;i++) if(!files[i].done) return i;
+    return -1;
+  }
+  function goNext(){
+    const n = nextUndone();
+    if(n>=0 && n!==curIdx) selectFile(n);
+    else if(files.every(f=>f.done)) setStatus("Minden fájl kész!","ok");
+  }
+
+  // ---- Űrlap reset --------------------------------------------------
+  function resetForm(){
+    el.name.value="";
+    selectedType=""; updateTypeRowSelection(); updateValidityRequirement();
+    el.whole.value="";
+    el.ocrText.textContent=""; el.prog.style.width="0%"; el.pct.textContent="";
+    updatePreview();
+  }
+
+  // ---- Jobbklikk menü ----------------------------------------------
+  let ctxEl=null;
+  function closeCtx(){ if(ctxEl){ ctxEl.remove(); ctxEl=null; document.removeEventListener("pointerdown", ctxOutside, true); } }
+  function ctxOutside(ev){ if(ctxEl && !ctxEl.contains(ev.target)) closeCtx(); }
+  function openCtx(x,y,items,header){
+    closeCtx();
+    const m=document.createElement("div"); m.className="ctxmenu";
+    if(header){ const h=document.createElement("div"); h.className="hd"; h.textContent=header; m.appendChild(h); }
+    items.forEach(it=>{
+      if(it.sep){ const s=document.createElement("div"); s.className="sep"; m.appendChild(s); return; }
+      const d=document.createElement("div"); d.className="it"+(it.disabled?" disabled":"");
+      const l=document.createElement("span"); l.textContent=it.label; d.appendChild(l);
+      if(it.key){ const k=document.createElement("span"); k.className="k"; k.textContent=it.key; d.appendChild(k); }
+      if(!it.disabled) d.onclick=()=>{ closeCtx(); it.action&&it.action(); };
+      m.appendChild(d);
+    });
+    document.body.appendChild(m);
+    const r=m.getBoundingClientRect();
+    m.style.left=Math.max(8, Math.min(x, innerWidth  - r.width  - 8))+"px";
+    m.style.top =Math.max(8, Math.min(y, innerHeight - r.height - 8))+"px";
+    ctxEl=m;
+    setTimeout(()=>document.addEventListener("pointerdown", ctxOutside, true), 0);
+  }
+  document.addEventListener("keydown", ev=>{ if(ev.key==="Escape") closeCtx(); });
+  window.addEventListener("blur", closeCtx);
+  document.addEventListener("scroll", closeCtx, true);
+
+  document.addEventListener("contextmenu", ev=>{
+    const tag=(ev.target.tagName||"").toLowerCase();
+    if(tag==="input"||tag==="textarea") return;
+    ev.preventDefault();
+    const li = ev.target.closest && ev.target.closest("#fileList li[data-idx]");
+    if(li){ openFileCtx(ev, parseInt(li.dataset.idx,10)); return; }
+    if(ev.target.closest && ev.target.closest("#previewBox")){ openPreviewCtx(ev); return; }
+    openGenericCtx(ev);
+  });
+
+  function openFileCtx(ev, idx){
+    const f=files[idx]; if(!f) return;
+    openCtx(ev.clientX, ev.clientY, [
+      { label:"Kijelölés / előnézet", disabled: idx===curIdx, action:()=>selectFile(idx) },
+      { label:"Kész (áthelyezés now)", disabled: idx!==curIdx, action:()=>doFinish() },
+      { sep:true },
+      { label: f.done ? "Kész visszavonása" : "Kész megjelölése", action:()=>{ f.done=!f.done; renderList(); } },
+      { label:"Kihagyás (következő)", action:()=>{ const n=nextUndone(); if(n>=0) selectFile(n); } },
+      { sep:true },
+      { label:"Mappa frissítése", disabled:!dirHandle, action:()=>{ if(dirHandle) listFiles(); } },
+    ], f.name);
+  }
+  function openPreviewCtx(ev){
+    openCtx(ev.clientX, ev.clientY, [
+      { label:"Nagyítás",  disabled:!zoomable, action:()=>{ const r=el.prev.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,1.3); } },
+      { label:"Kicsinyítés", disabled:!zoomable, action:()=>{ const r=el.prev.getBoundingClientRect(); zoomAt(r.width/2,r.height/2,0.75); } },
+      { label:"Eredeti nézet", disabled:!zoomable, action:()=>{ const s=stageEl(); fitPreview(parseFloat(s.style.width)||1, parseFloat(s.style.height)||1); } },
+      { sep:true },
+      { label:"OCR olvasás", disabled:!ocrSource, action:()=>runOCR() },
+    ], "Előnézet");
+  }
+  function openGenericCtx(ev){
+    openCtx(ev.clientX, ev.clientY, [
+      { label:"Mappa kiválasztása", action:()=>pickFolder() },
+      { label:"Mappa frissítése", disabled:!dirHandle, action:()=>{ if(dirHandle) listFiles(); } },
+    ], "Szkennelt átnevező");
+  }
+
+  // ---- IndexedDB ----------------------------------------------------
+  function idbDB(){
+    return new Promise((res,rej)=>{
+      const r=indexedDB.open("scanRenamer",1);
+      r.onupgradeneeded=()=>{ r.result.createObjectStore("kv"); };
+      r.onsuccess=()=>res(r.result); r.onerror=()=>rej(r.error);
+    });
+  }
+  async function idbSet(k,v){ const db=await idbDB(); return new Promise((res,rej)=>{ const tx=db.transaction("kv","readwrite"); tx.objectStore("kv").put(v,k); tx.oncomplete=()=>res(); tx.onerror=()=>rej(tx.error); }); }
+  async function idbGet(k){ const db=await idbDB(); return new Promise((res,rej)=>{ const tx=db.transaction("kv","readonly"); const rq=tx.objectStore("kv").get(k); rq.onsuccess=()=>res(rq.result); rq.onerror=()=>rej(rq.error); }); }
+  async function idbDel(k){ try{ const db=await idbDB(); await new Promise(r=>{ const tx=db.transaction("kv","readwrite"); tx.objectStore("kv").delete(k); tx.oncomplete=()=>r(); tx.onerror=()=>r(); }); }catch(_){} }
+
+  function hideRestoreButton(){ el.resume.style.display="none"; }
+  function showRestoreButton(handle){
+    el.resume.textContent = "Folytatás – " + handle.name;
+    el.resume.style.display = "";
+    el.resume.onclick = ()=>resumeSaved(handle);
+  }
+  async function resumeSaved(handle){
+    try{
+      const perm = await handle.requestPermission({ mode:"readwrite" });
+      if(perm!=="granted"){ banner("Nincs engedély a mentett mappához."); return; }
+      dirHandle = handle; banner(""); hideRestoreButton();
+      await listFiles();
+    }catch(err){ banner("Nem sikerült megnyitni a mentett mappát: "+(err&&err.message||err)); idbDel("lastDir"); }
+  }
+  async function tryRestore(){
+    let saved=null;
+    try{ saved = await idbGet("lastDir"); }catch(_){}
+    if(!saved || typeof saved.queryPermission!=="function") return;
+    let perm="prompt";
+    try{ perm = await saved.queryPermission({ mode:"readwrite" }); }catch(_){}
+    if(perm==="granted"){
+      try{ dirHandle = saved; await listFiles(); }catch(_){ idbDel("lastDir"); }
+    }else{
+      showRestoreButton(saved);
+    }
+  }
+
+  // ---- Előzmények kezelése & API / JSON Mentés ------------------------
+  let historyList = [];
+  try {
+    const savedHist = localStorage.getItem("scanRenamer_history");
+    if(savedHist) historyList = JSON.parse(savedHist);
+  } catch(_) { historyList = []; }
+
+  function saveHistory(){
+    try {
+      localStorage.setItem("scanRenamer_history", JSON.stringify(historyList));
+    } catch(_) {}
+  }
+
+  function addHistoryEntry(entry){
+    const now = new Date();
+    historyList.unshift({
+      id: "hist_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
+      origName: entry.origName || "",
+      newName: entry.newName || "",
+      personName: entry.personName || "",
+      type: entry.type || "",
+      validity: entry.validity || "",
+      year: entry.year || selectedYear || "",
+      targetPath: entry.targetPath || "",
+      isoDate: now.toISOString(),
+      date: now.toLocaleDateString("hu-HU"),
+      time: now.toLocaleTimeString("hu-HU", { hour: '2-digit', minute: '2-digit', second: '2-digit' })
+    });
+    if(historyList.length > 500) historyList = historyList.slice(0, 500);
+    saveHistory();
+  }
+
+  function escapeHtml(str){
+    if(!str) return "";
+    return String(str)
+      .replace(/&/g, "&amp;")
+      .replace(/</g, "&lt;")
+      .replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;")
+      .replace(/'/g, "&#039;");
+  }
+
+  function renderHistoryList(){
+    const container = $("historyListContainer");
+    if(!container) return;
+
+    if(!historyList.length){
+      container.innerHTML = `<div style="text-align:center;color:var(--muted);padding:36px 10px;">Még nincsenek átnevezett vagy áthelyezett fájlok az előzményekben.</div>`;
+      return;
+    }
+
+    container.innerHTML = historyList.map(item => `
+      <div class="history-item">
+        <div class="history-header">
+          <span class="history-type-badge">${escapeHtml(item.type || 'Dokumentum')}</span>
+          <span class="history-time">🗓️ ${escapeHtml(item.date || '')} ${escapeHtml(item.time || '')}</span>
+        </div>
+        <div class="history-files">
+          <span style="color:var(--muted);font-weight:normal">${escapeHtml(item.origName)}</span> ➔ 
+          <span style="color:var(--accent-d);font-weight:700">${escapeHtml(item.newName)}</span>
+        </div>
+        <div class="history-details-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:var(--muted);margin-top:2px;">
+          <div>👤 <b>Név:</b> ${escapeHtml(item.personName || '—')}</div>
+          <div>📅 <b>Érvényesség:</b> ${escapeHtml(item.validity || '—')}</div>
+          <div>📁 <b>Célmappa:</b> ${escapeHtml(item.targetPath || item.type)}</div>
+          <div>🏷️ <b>Év:</b> ${escapeHtml(item.year || '—')}</div>
+        </div>
+        <div class="history-actions">
+          <button type="button" class="btn-sm primary" onclick="openFolderForHistory('${item.id}')" title="Mappa megnyitása / útvonal másolása">
+            📁 Megnyitás az Intézőben
+          </button>
+          <button type="button" class="btn-sm" onclick="copyPathForHistory('${item.id}')" title="Célmappa útvonalának másolása">
+            📋 Útvonal
+          </button>
+          <button type="button" class="btn-sm" onclick="copyNewNameForHistory('${item.id}')" title="Új fájlnév másolása">
+            📄 Új név másolása
+          </button>
+        </div>
+      </div>
+    `).join('');
+  }
+
+  window.openFolderForHistory = async function(id){
+    const item = historyList.find(x => x.id === id);
+    if(!item) return;
+
+    const pathText = item.targetPath || item.type;
+
+    // 1. Útvonal másolása a vágólapra
+    try {
+      await navigator.clipboard.writeText(pathText);
+    } catch(_) {}
+
+    // 2. Mappa megnyitása / kijelölése a meglévő célmappa mappa-kezelőjével
+    let handleOpened = false;
+    try {
+      const handle = await idbGet("docDir_" + item.type);
+      if(handle && window.showDirectoryPicker){
+        await window.showDirectoryPicker({ startIn: handle, mode: "read" });
+        handleOpened = true;
+      }
+    } catch(err) {
+      if(err && err.name === "AbortError") {
+        handleOpened = true;
+      }
+    }
+
+    if(handleOpened){
+      setStatus(`Mappa elérése megnyitva: ${pathText}`, "ok");
+    } else {
+      alert(`Célmappa útvonala másolva a vágólapra:\n${pathText}\n\nNyomd meg a Win + R billentyűkombinációt (vagy illeszd be az Intézőbe), majd nyomj Entert a megnyitáshoz!`);
+      setStatus(`Útvonal másolva a vágólapra: ${pathText}`, "ok");
+    }
+  };
+
+  window.copyPathForHistory = async function(id){
+    const item = historyList.find(x => x.id === id);
+    if(!item) return;
+    const pathText = item.targetPath || item.type;
+    try {
+      await navigator.clipboard.writeText(pathText);
+      setStatus(`Útvonal másolva: ${pathText}`, "ok");
+    } catch(e) {
+      setStatus(`Másolási hiba: ${e.message}`, "err");
+    }
+  };
+
+  window.copyNewNameForHistory = async function(id){
+    const item = historyList.find(x => x.id === id);
+    if(!item) return;
+    try {
+      await navigator.clipboard.writeText(item.newName);
+      setStatus(`Új fájlnév másolva: ${item.newName}`, "ok");
+    } catch(e) {
+      setStatus(`Másolási hiba: ${e.message}`, "err");
+    }
+  };
+
+  function exportHistoryJson(){
+    if(!historyList.length){
+      alert("Nincsenek letölthető előzmények.");
+      return;
+    }
+    const dataStr = "data:text/json;charset=utf-8," + encodeURIComponent(JSON.stringify(historyList, null, 2));
+    const dlAnchor = document.createElement('a');
+    dlAnchor.setAttribute("href", dataStr);
+    dlAnchor.setAttribute("download", "history_api.json");
+    document.body.appendChild(dlAnchor);
+    dlAnchor.click();
+    dlAnchor.remove();
+    setStatus("Előzmények sikeresen letöltve history_api.json fájlként! (GitHub / Netlify API-hoz)", "ok");
+  }
+
+  function importHistoryJsonFile(file){
+    if(!file) return;
+    const reader = new FileReader();
+    reader.onload = (e) => {
+      try {
+        const imported = JSON.parse(e.target.result);
+        if(Array.isArray(imported)){
+          historyList = imported;
+          saveHistory();
+          renderHistoryList();
+          setStatus(`${imported.length} előzmény beolvasva a JSON fájlból!`, "ok");
+        } else {
+          alert("Érvénytelen JSON formátum! Egy előzmény listát tartalmazó JSON tömbre (Array) van szükség.");
+        }
+      } catch(err) {
+        alert("JSON beolvasási hiba: " + err.message);
+      }
+    };
+    reader.readAsText(file);
+  }
+
+  function getHistoryModal(){ return $("historyModal"); }
+
+  function openHistoryModal(){
+    renderHistoryList();
+    const modal = getHistoryModal();
+    if(modal) modal.classList.add("active");
+  }
+
+  function closeHistoryModal(){
+    const modal = getHistoryModal();
+    if(modal) modal.classList.remove("active");
+  }
+
+  const historyBtn = $("historyBtn");
+  if(historyBtn) historyBtn.onclick = openHistoryModal;
+
+  document.addEventListener("click", (e) => {
+    const modal = getHistoryModal();
+    if(e.target && (e.target.id === "closeHistoryBtn" || e.target.id === "closeHistoryFooterBtn")){
+      closeHistoryModal();
+    } else if(modal && e.target === modal){
+      closeHistoryModal();
+    } else if(e.target && e.target.id === "exportHistoryBtn"){
+      exportHistoryJson();
+    } else if(e.target && e.target.id === "importHistoryBtn"){
+      const inp = $("importHistoryInput");
+      if(inp) inp.click();
+    } else if(e.target && e.target.id === "clearHistoryBtn"){
+      if(confirm("Biztosan törölni szeretnéd az összes előzményt?")){
+        historyList = [];
+        saveHistory();
+        renderHistoryList();
+        setStatus("Előzmények törölve.", "ok");
+      }
+    }
+  });
+
+  const importInp = $("importHistoryInput");
+  if(importInp){
+    importInp.onchange = (e) => {
+      if(e.target.files && e.target.files[0]){
+        importHistoryJsonFile(e.target.files[0]);
+        e.target.value = "";
+      }
+    };
+  }
+
+  if(!window.showDirectoryPicker){
+    banner("A böngésződ nem támogatja a közvetlen mappa elérést. Használd a legújabb Chrome vagy Edge böngészőt!");
+  } else {
+    tryRestore();
+  }
+})();
+</script>
+</body>
+</html>
