@@ -216,6 +216,8 @@
   <span id="counter" class="sub"></span>
 </header>
 
+<div id="banner" class="banner"></div>
+
 <!-- ELŐZMÉNYEK MODAL -->
 <div id="historyModal" class="modal-backdrop">
   <div class="modal-dialog">
@@ -553,7 +555,12 @@
   }
 
   // ---- Segéd: figyelmeztető sáv -------------------------------------
-  function banner(msg){ if(msg){ el.banner.textContent=msg; el.banner.style.display="block"; } else el.banner.style.display="none"; }
+  function banner(msg){
+    const b = (el && el.banner) ? el.banner : $("banner");
+    if(!b) return;
+    if(msg){ b.textContent = msg; b.style.display = "block"; }
+    else { b.style.display = "none"; }
+  }
   function setStatus(msg,kind){ el.status.textContent=msg||""; el.status.className="status"+(kind?" "+kind:""); }
 
   function clearValidationErrors(){
