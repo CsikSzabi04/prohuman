@@ -832,12 +832,15 @@
       const inputWrapper = document.createElement("div");
       inputWrapper.className = "path-input-wrapper";
 
+      const defaultVal = docPaths[t] || (typesApiData && typesApiData.pathSuggestions && typesApiData.pathSuggestions[t] && typesApiData.pathSuggestions[t][0]) || t;
+      docPaths[t] = defaultVal;
+
       const input = document.createElement("input");
       input.type = "text";
       input.className = "path-input";
       input.id = "path-input-" + slugify(t);
       input.placeholder = "copy the path to move";
-      input.value = docPaths[t] || "";
+      input.value = docPaths[t];
       input.autocomplete = "off";
 
       const dropdown = document.createElement("div");
@@ -847,7 +850,7 @@
         const set = new Set();
         if(docPaths[t]) set.add(docPaths[t]);
 
-        const apiSugg = (typesApiData.pathSuggestions && typesApiData.pathSuggestions[t]) || [];
+        const apiSugg = (typesApiData && typesApiData.pathSuggestions && typesApiData.pathSuggestions[t]) || [];
         apiSugg.forEach(s => { if(s) set.add(s); });
 
         if(typeof historyList !== 'undefined' && Array.isArray(historyList)){
@@ -900,6 +903,11 @@
       btn.textContent = t;
 
       const selectThisType = () => {
+        if(!docPaths[t]){
+          docPaths[t] = (typesApiData && typesApiData.pathSuggestions && typesApiData.pathSuggestions[t] && typesApiData.pathSuggestions[t][0]) || t;
+          input.value = docPaths[t];
+          saveDocPaths();
+        }
         if (selectedType !== t) {
           selectedType = t;
           updateTypeRowSelection();
@@ -1442,7 +1450,7 @@
   function updatePreview(){
     const base = buildBaseName();
     const typeVal = currentType();
-    const targetPathVal = (typeVal && docPaths[typeVal] ? docPaths[typeVal] : "").trim();
+    const targetPathVal = (typeVal ? (docPaths[typeVal] || (typesApiData && typesApiData.pathSuggestions && typesApiData.pathSuggestions[typeVal] && typesApiData.pathSuggestions[typeVal][0]) || typeVal) : "").trim();
     const ok = !!base && curIdx>=0;
     
     if(ok){
