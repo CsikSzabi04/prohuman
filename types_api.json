@@ -9,30 +9,5 @@
     "adóelőleg",
     "összevont adóelőleg"
   ],
-  "pathSuggestions": {
-    "munkába járás": [
-      "D:\\CliMark\\Prohuman\\munkába járás"
-    ],
-    "tp": [
-      "D:\\CliMark\\Prohuman\\tp"
-    ],
-    "pótszabi": [
-      "D:\\CliMark\\Prohuman\\pótszabi"
-    ],
-    "szerződés csomag": [
-      "D:\\CliMark\\Prohuman\\szerződés csomag"
-    ],
-    "országbérlet": [
-      "D:\\CliMark\\Prohuman\\országbérlet"
-    ],
-    "vármegyebérlet": [
-      "D:\\CliMark\\Prohuman\\vármegyebérlet"
-    ],
-    "adóelőleg": [
-      "D:\\CliMark\\Prohuman\\adóelőleg"
-    ],
-    "összevont adóelőleg": [
-      "D:\\CliMark\\Prohuman\\összevont adóelőleg"
-    ]
-  }
+  "pathSuggestions": {}
 }

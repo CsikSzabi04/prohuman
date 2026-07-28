@@ -442,13 +442,33 @@
     }
   } catch(_) {}
 
+  let typesApiData = { docTypes: [], pathSuggestions: {} };
+  try {
+    const savedApiData = localStorage.getItem("scanRenamer_typesApiData");
+    if (savedApiData) {
+      const parsedApi = JSON.parse(savedApiData);
+      if (parsedApi && typeof parsedApi === 'object') typesApiData = parsedApi;
+    }
+  } catch(_) {}
+
   function saveDocTypes(){
     try {
       localStorage.setItem("scanRenamer_docTypes", JSON.stringify(docTypes));
     } catch(_) {}
   }
 
-  let typesApiData = { docTypes: [], pathSuggestions: {} };
+  function savePathSuggestionForType(t, pathVal){
+    if(!t || !pathVal) return;
+    if(!typesApiData) typesApiData = { docTypes: [], pathSuggestions: {} };
+    if(!typesApiData.pathSuggestions) typesApiData.pathSuggestions = {};
+    if(!typesApiData.pathSuggestions[t]) typesApiData.pathSuggestions[t] = [];
+    if(!typesApiData.pathSuggestions[t].includes(pathVal)){
+      typesApiData.pathSuggestions[t].push(pathVal);
+      try {
+        localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData));
+      } catch(_) {}
+    }
+  }
 
   async function loadTypesFromApi(){
     try {
@@ -459,7 +479,14 @@
       if(resp.ok){
         const data = await resp.json();
         if(data && typeof data === 'object'){
-          typesApiData = data;
+          if(data.pathSuggestions && typeof data.pathSuggestions === 'object'){
+            Object.keys(data.pathSuggestions).forEach(t => {
+              if(!typesApiData.pathSuggestions[t]) typesApiData.pathSuggestions[t] = [];
+              data.pathSuggestions[t].forEach(s => {
+                if(!typesApiData.pathSuggestions[t].includes(s)) typesApiData.pathSuggestions[t].push(s);
+              });
+            });
+          }
           if(Array.isArray(data.docTypes) && data.docTypes.length > 0){
             let hasNew = false;
             data.docTypes.forEach(t => {
@@ -950,6 +977,7 @@
         const inp = $("path-input-" + slugify(t));
         if(inp) inp.value = folderName;
         saveDocPaths();
+        savePathSuggestionForType(t, folderName);
         selectedType = t;
         updateTypeRowSelection();
         clearValidationErrors();
@@ -1508,15 +1536,17 @@
     let targetFolderName = parts.length ? parts[parts.length - 1] : typeVal;
     if(!targetFolderName) targetFolderName = typeVal;
 
-    // 3. Meglévő mappa keresése dirHandle-ben (SOHA NEM HOZ LÉTRE ÚJ MAPPA-T: create: false)
-    try{
-      return await dirHandle.getDirectoryHandle(targetFolderName, { create: false });
-    }catch(_){}
+    // 3. Meglévő vagy új célmappa nyitása dirHandle-ben
+    if(dirHandle){
+      try{
+        return await dirHandle.getDirectoryHandle(targetFolderName, { create: true });
+      }catch(_){}
+    }
 
-    // 4. Ha a nyitott mappán kívül van (pl. scan helyett PROHUMAN/tp), megnyitjuk a mappa-választót
+    // 4. Ha a nyitott mappán kívül van, megnyitjuk a mappa-választót
     if(window.showDirectoryPicker){
       try {
-        setStatus(`Válaszd ki a(z) '${typeVal}' célmappát a gépeden (pl. D:\\CsSzabj\\PROHUMAN\\${targetFolderName})!`, "warn");
+        setStatus(`Válaszd ki a(z) '${typeVal}' célmappát a gépeden!`, "warn");
         const handle = await window.showDirectoryPicker({ mode:"readwrite" });
         const perm = await handle.requestPermission({ mode:"readwrite" });
         if(perm === "granted"){
@@ -1525,6 +1555,7 @@
           if(inp) inp.value = handle.name;
           docPaths[typeVal] = handle.name;
           saveDocPaths();
+          savePathSuggestionForType(typeVal, handle.name);
           return handle;
         }
       } catch(pickErr) {
