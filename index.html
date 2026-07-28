@@ -1747,11 +1747,14 @@
 
   async function loadHistoryFromApi(){
     try {
-      const url = location.protocol === 'file:'
-        ? 'https://csikszabi04.github.io/prohuman/history_api.json'
-        : './history_api.json';
-      const resp = await fetch(url + '?v=' + Date.now());
-      if(resp.ok){
+      let resp = await fetch('http://localhost:88/api/history').catch(() => null);
+      if(!resp || !resp.ok){
+        const url = location.protocol === 'file:'
+          ? 'https://csikszabi04.github.io/prohuman/history_api.json'
+          : './history_api.json';
+        resp = await fetch(url + '?v=' + Date.now());
+      }
+      if(resp && resp.ok){
         const apiData = await resp.json();
         if(Array.isArray(apiData) && apiData.length > 0){
           const existingKeys = new Set(historyList.map(item => item.id || (item.origName + "_" + item.newName)));
@@ -1778,7 +1781,7 @@
 
   function addHistoryEntry(entry){
     const now = new Date();
-    historyList.unshift({
+    const item = {
       id: "hist_" + Date.now() + "_" + Math.random().toString(36).substring(2, 7),
       origName: entry.origName || "",
       newName: entry.newName || "",
@@ -1790,9 +1793,18 @@
       isoDate: now.toISOString(),
       date: now.toLocaleDateString("hu-HU"),
       time: now.toLocaleTimeString("hu-HU", { hour: '2-digit', minute: '2-digit', second: '2-digit' })
-    });
+    };
+    historyList.unshift(item);
     if(historyList.length > 500) historyList = historyList.slice(0, 500);
     saveHistory();
+
+    try {
+      fetch('http://localhost:88/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      }).catch(() => {});
+    } catch(_) {}
   }
 
   function escapeHtml(str){
