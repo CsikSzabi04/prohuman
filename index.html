@@ -217,6 +217,10 @@
   .history-path { font-size: 12px; color: var(--muted); word-break: break-all; display: flex; align-items: center; gap: 6px; margin-top: 2px; }
   .history-actions { display: flex; gap: 8px; margin-top: 4px; }
   .btn-sm { padding: 5px 10px; font-size: 12px; border-radius: 6px; }
+
+  /* Futó művelet alatt tiltjuk a kattintást (dupla-áthelyezés ellen) */
+  body.busy{cursor:progress}
+  body.busy .wrap{pointer-events:none;opacity:.72;transition:opacity .12s ease}
 </style>
 </head>
 <body>
@@ -251,7 +255,7 @@
     <div class="modal-header">
       <div>
         <h2 style="margin:0;font-size:15px;font-weight:700">Átnevezési és áthelyezési előzmények</h2>
-        <span class="sub" style="font-size:11px;color:var(--muted)">Részletes adatok & JSON API export (GitHub / Netlify kompatibilis)</span>
+        <span class="sub" style="font-size:11px;color:var(--muted)">Helyben tárolva ebben a böngészőben · JSON export / import</span>
       </div>
       <button type="button" class="modal-close" id="closeHistoryBtn" title="Bezárás">&times;</button>
     </div>
@@ -260,7 +264,7 @@
     </div>
     <div class="modal-footer">
       <div style="display:flex;gap:8px;align-items:center;">
-        <button type="button" id="exportHistoryBtn" class="btn-sm" title="Előzmények letöltése JSON fájlként (GitHub / Netlify API-hoz)">📥 JSON Export</button>
+        <button type="button" id="exportHistoryBtn" class="btn-sm" title="Előzmények letöltése JSON fájlként (mentés vagy másik gépre átvitel)">📥 JSON Export</button>
         <button type="button" id="importHistoryBtn" class="btn-sm" title="JSON előzmények betöltése">📤 JSON Import</button>
         <input type="file" id="importHistoryInput" accept=".json" style="display:none" />
       </div>
@@ -363,11 +367,27 @@
   </div>
 </div>
 
-<!-- Külső könyvtárak -->
-<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"></script>
-<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/ag-psd/dist/bundle.js"></script>
-<script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"></script>
+<!--
+  Külső könyvtárak — MINDEN verzió pinelve + SHA-384 Subresource Integrity.
+  Ez az oldal a File System Access API-n át a LEMEZEDHEZ fér hozzá, ezért egy
+  feltört/megváltozott CDN-fájl itt nem kellemetlenség, hanem teljes
+  fájlrendszer-hozzáférés lenne. Az `integrity` miatt a böngésző eldobja a
+  szkriptet, ha akár EGYETLEN bájt is más.
+  FIGYELEM: az ag-psd korábban verzió nélkül (`npm/ag-psd`) töltődött, azaz
+  a "latest"-et kapta — ez bármikor, figyelmeztetés nélkül megváltozhatott.
+-->
+<script src="https://cdn.jsdelivr.net/npm/tesseract.js@5.1.0/dist/tesseract.min.js"
+        integrity="sha384-1zP4ZOtlk2FXAOiUArpMuWf7INJJKe/ROfYFAVSeUa11DEfXdKWGiPI3dVma2Gt0"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"
+        integrity="sha384-/1qUCSGwTur9vjf/z9lmu/eCUYbpOTgSjmpbMQZ1/CtX2v/WcAIKqRv+U1DUCG6e"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/ag-psd@31.0.2/dist/bundle.js"
+        integrity="sha384-9dhx2Gx3cKvCuBJwLZxPUmqz77LqKJIAzYABzUhCaCPDK5Rz+CFt6/jeKu84tBA6"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
+<script src="https://cdn.jsdelivr.net/npm/utif@3.1.0/UTIF.js"
+        integrity="sha384-RyBmXHdfZ/Uon+ud+/AqSyWpUWnKYt2tkRG/P4gWoRUGDU+qIAV3tGBPNlYTBZEF"
+        crossorigin="anonymous" referrerpolicy="no-referrer"></script>
 <script>
 (function(){
   "use strict";
@@ -457,30 +477,24 @@
     } catch(_) {}
   }
 
-  async function apiFetch(endpoint, options = {}) {
-    const urls = [];
-    if (window.location.protocol !== 'file:') {
-      urls.push(endpoint);
-    }
-    urls.push('https://proscanner.netlify.app' + endpoint);
-    urls.push('http://localhost:88' + endpoint);
-
-    // FONTOS: csak a 2xx számít sikernek. Korábban a `status < 500` miatt egy
-    // same-origin 404 (pl. statikus szerverről nyitva, ahol nincs függvény) LEZÁRTA
-    // a láncot → a netlify.app-ot meg sem próbálta, és úgy tűnt, "nem ment el".
-    let lastErr = null, lastRes = null;
-    for (const url of urls) {
-      try {
-        const res = await fetch(url, options);
-        if (res && res.ok) return res;
-        if (res) lastRes = res;
-      } catch (err) {
-        lastErr = err;
-      }
-    }
-    if (lastRes) return lastRes;
-    throw lastErr || new Error("API Nem érhető el");
-  }
+  // ── HELYI TÁROLÁS (nincs hálózati kapcsolat) ────────────────────────
+  //
+  // Ez az alkalmazás SEMMILYEN adatot nem küld ki a gépről. Korábban minden
+  // átnevezéskor kiment a személynév, a dokumentumtípus és a lemezes útvonal
+  // egy publikus API-ra — ott hitelesítés nélkül bárki elolvashatta. Mivel a
+  // programot egy helyen használják, a gépek közti szinkronra nincs szükség,
+  // így a legegyszerűbb és egyben legbiztonságosabb megoldás maradt: minden
+  // adat a böngészőben marad.
+  //
+  // Ami a helyén maradt:
+  //   · előzmény             → localStorage  (+ kézi JSON export/import)
+  //   · útvonal-javaslatok   → localStorage
+  //   · dokumentumtípusok    → localStorage
+  //   · mappa-engedélyek     → IndexedDB
+  //
+  // Ha később mégis kellene több gép közötti szinkron, ide kerülne vissza egy
+  // hitelesített API-hívás — de akkor a kiszolgálót is védeni KELL, különben
+  // a személyes adat újra kikerül a nyílt internetre.
 
   // ── ABSZOLÚT ÚTVONAL ────────────────────────────────────────────────
   // A böngésző (File System Access API) BIZTONSÁGI OKBÓL nem adja meg a mappa
@@ -490,8 +504,27 @@
   let rootAbsPath = "";
   try { rootAbsPath = localStorage.getItem("scanRenamer_rootAbsPath") || ""; } catch(_){}
 
+  // ÚTVONAL-NORMALIZÁLÁS — a backend.js és a netlify függvény normPath-jával
+  // BÁJTRA AZONOS. (Korábban eltértek: a frontend a `\` ismétlődéseket is
+  // összevonta, a backend csak a `/`-t, ezért ugyanaz az útvonal két külön
+  // javaslatként került be.)
+  //
+  // Két esetet KÜLÖN kell kezelni, különben a normalizálás elrontja őket:
+  //  · UNC hálózati útvonal (\\fileserver\HR\tp): a vezető KÉT elválasztó
+  //    egyetlen `\`-re olvadt, így az isAbsPath már nem ismerte fel, és a
+  //    szerver eldobta. Céges környezetben ez a leggyakoribb útvonalforma.
+  //  · POSIX abszolút út (/mnt/share/tp): a `/`-ek `\`-re váltottak, amitől
+  //    szintén elbukott az abszolút-teszten — noha a kód elvileg támogatja.
   function normAbs(p){
-    return String(p == null ? "" : p).trim().replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
+    let s = String(p == null ? "" : p).trim();
+    if(!s) return "";
+    if(s.startsWith("/") && !s.startsWith("//")){
+      return s.replace(/\/+/g, "/").replace(/(.)\/+$/, "$1");
+    }
+    const unc = /^[\\/]{2}/.test(s);
+    s = s.replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
+    if(unc) s = "\\" + s;
+    return s;
   }
   function isAbsPath(p){
     const s = String(p == null ? "" : p).trim();
@@ -509,7 +542,7 @@
     const ans = window.prompt(
       "Add meg a MEGNYITOTT mappa teljes útvonalát.\n" +
       "(A böngésző biztonsági okból nem tudja kiolvasni, enélkül viszont nem tudjuk\n" +
-      "az API-ba menteni a valódi célútvonalakat.)\n\n" +
+      "megjegyezni a valódi célútvonalakat.)\n\n" +
       "Példa:  D:\\CsSzabj\\PROHUMAN\n\nA megnyitott mappa neve: " + name,
       rootAbsPath || "D:\\CsSzabj\\PROHUMAN"
     );
@@ -537,75 +570,43 @@
     const guess = (rootAbsPath ? normAbs(rootAbsPath) : "D:\\CsSzabj\\PROHUMAN") + "\\" + folder;
     const ans = window.prompt(
       "Mi a(z) '" + (typeVal || folder) + "' célmappa TELJES útvonala?\n" +
-      "(Ezt égetjük be az API-ba, hogy legközelebb fel tudjuk kínálni.)",
+      "(Ezt jegyezzük meg, hogy legközelebb fel tudjuk kínálni.)",
       guess
     );
     if(ans && isAbsPath(ans)) return normAbs(ans);
     return normAbs(pathVal) || folder;
   }
 
-  // Az API-mentés MOSTANTÓL MINDIG lefut (a szerver-oldali összefésülés idempotens).
-  // Korábban a „csak ha még nincs a lokális listában” feltétel miatt egy sikertelen
-  // mentés SOHA nem próbálkozott újra → az útvonal örökre elveszett.
-  // Visszatérés: true = a szerver VISSZAIGAZOLTA, hogy eltárolta.
-  async function savePathSuggestionForType(t, pathVal){
+  // Útvonal-javaslat mentése — kizárólag a böngésző localStorage-ába.
+  // Ugyanaz a szabály, mint korábban a szerveren: CSAK teljes útvonalat
+  // tárolunk (pl. D:\CsSzabj\PROHUMAN\tp), mert a puszta mappanév ("tp")
+  // javaslatként használhatatlan.
+  function savePathSuggestionForType(t, pathVal){
     const cleanPath = normAbs(pathVal);
-    if(!t || !cleanPath || cleanPath.length <= 2) return false;
+    if(!t || !cleanPath || cleanPath.length < 3 || !isAbsPath(cleanPath)) return false;
 
     if(!typesApiData) typesApiData = { docTypes: [], pathSuggestions: {} };
     if(!typesApiData.pathSuggestions) typesApiData.pathSuggestions = {};
-    if(!typesApiData.pathSuggestions[t]) typesApiData.pathSuggestions[t] = [];
-    if(!typesApiData.pathSuggestions[t].includes(cleanPath)) typesApiData.pathSuggestions[t].push(cleanPath);
-    try { localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData)); } catch(_){}
+    if(!Array.isArray(typesApiData.pathSuggestions[t])) typesApiData.pathSuggestions[t] = [];
 
-    try{
-      const res = await apiFetch('/api/types', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ docTypes: docTypes, pathSuggestions: { [t]: [cleanPath] } })
-      });
-      if(!res || !res.ok) return false;
-      const data = await res.json().catch(() => null);
-      return !!(data && data.pathSuggestions && Array.isArray(data.pathSuggestions[t])
-        && data.pathSuggestions[t].includes(cleanPath));
-    }catch(err){
-      console.error("Hiba az API mentés során:", err);
+    const bucket = typesApiData.pathSuggestions[t];
+    if(bucket.length < MAX_PATHS_PER_TYPE && !bucket.includes(cleanPath)) bucket.push(cleanPath);
+
+    try {
+      localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData));
+      return true;
+    } catch(err) {
+      // Tele van a tárhely — ezt nem nyeljük el némán, mert innentől
+      // egyetlen javaslat sem mentődne el.
+      console.error("Nem sikerült elmenteni az útvonal-javaslatot:", err);
       return false;
     }
   }
 
-  async function loadTypesFromApi(){
-    try {
-      let resp = await apiFetch('/api/types').catch(() => null);
-      if(resp && resp.ok){
-        const data = await resp.json();
-        if(data && typeof data === 'object'){
-          if(data.pathSuggestions && typeof data.pathSuggestions === 'object'){
-            Object.keys(data.pathSuggestions).forEach(t => {
-              if(!typesApiData.pathSuggestions[t]) typesApiData.pathSuggestions[t] = [];
-              data.pathSuggestions[t].forEach(s => {
-                if(!typesApiData.pathSuggestions[t].includes(s)) typesApiData.pathSuggestions[t].push(s);
-              });
-            });
-          }
-          if(Array.isArray(data.docTypes) && data.docTypes.length > 0){
-            let hasNew = false;
-            data.docTypes.forEach(t => {
-              if(!docTypes.includes(t)){
-                docTypes.push(t);
-                hasNew = true;
-              }
-            });
-            if(hasNew){
-              saveDocTypes();
-              buildTypeRows();
-            }
-          }
-        }
-      }
-    } catch(err) {}
-  }
-
+  // Mennyiségi korlátok a localStorage védelmére: egy hosszú munkamenet
+  // vagy egy hibás JSON-import se tudja telezabálni a tárhelyet.
+  const MAX_TYPES = 200, MAX_TYPE_LEN = 80;
+  const MAX_PATHS_PER_TYPE = 50, MAX_PATH_LEN = 400;
   // ---- Elemek -------------------------------------------------------
   const $ = id => document.getElementById(id);
   const el = {
@@ -748,7 +749,7 @@
       title: "Típus szerkesztése",
       label: `Szerkeszd a(z) '${oldName}' típus nevét:`,
       value: oldName,
-      onSubmit: (cleanName) => {
+      onSubmit: async (cleanName) => {
         if(cleanName === oldName) return;
         if(docTypes.includes(cleanName)){
           alert("Ilyen névvel már létezik típus!");
@@ -762,6 +763,23 @@
             delete docPaths[oldName];
             saveDocPaths();
           }
+
+          // A típushoz kötött mappa-engedély az IndexedDB-ben a TÍPUS NEVE
+          // alatt van ("docDir_tp"). Átnevezéskor ez korábban ottmaradt a régi
+          // kulcson, így a mappa-hozzárendelés némán elveszett: a következő
+          // áthelyezés már nem találta, és egy új mappát hozott létre.
+          try{
+            const h = await idbGet("docDir_" + oldName);
+            if(h){ await idbSet("docDir_" + cleanName, h); await idbDel("docDir_" + oldName); }
+          }catch(_){}
+
+          // Az útvonal-javaslatok is a típusnévhez tartoznak – ezeket is visszük.
+          if(typesApiData && typesApiData.pathSuggestions && typesApiData.pathSuggestions[oldName]){
+            typesApiData.pathSuggestions[cleanName] = typesApiData.pathSuggestions[oldName];
+            delete typesApiData.pathSuggestions[oldName];
+            try{ localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData)); }catch(_){}
+          }
+
           if(selectedType === oldName) selectedType = cleanName;
           saveDocTypes();
           buildTypeRows();
@@ -818,12 +836,16 @@
     showCustomConfirm({
       title: "Típus törlése",
       text: `Biztosan törölni szeretnéd a(z) '${t}' dokumentum típust?`,
-      onConfirm: () => {
+      onConfirm: async () => {
         docTypes = docTypes.filter(x => x !== t);
         if(docPaths[t]){
           delete docPaths[t];
           saveDocPaths();
         }
+        // A típushoz kötött mappa-engedélyt is eldobjuk, különben árva
+        // handle-ök gyűlnek az IndexedDB-ben, és egy azonos nevű, később
+        // létrehozott típus egy régi, már nem kívánt mappát örökölne meg.
+        try{ await idbDel("docDir_" + t); }catch(_){}
         if(selectedType === t) selectedType = docTypes[0] || "";
         saveDocTypes();
         buildTypeRows();
@@ -1101,16 +1123,21 @@
 
   function updateValidityRequirement(){
     const req = VALIDITY_REQUIRED_TYPES.includes(selectedType);
+    const cur = el.valid.value.trim();
+    // "Automatikusnak" azt tekintjük, amit mi magunk írtunk be: üres, vagy
+    // csak az évsablon (pl. "2026."). Korábban a nem-kötelező típusra váltás
+    // FELTÉTEL NÉLKÜL kiürítette a mezőt – így a kézzel begépelt érvényesség
+    // egy típusváltásnál némán elveszett.
+    const isAutoFilled = !cur || /^\d{4}\.?$/.test(cur);
+
     if(req){
       el.validReqBadge.className = "req-star";
       el.validReqBadge.textContent = "* (amelyikhez kell)";
-      if(!el.valid.value.trim()){
-        el.valid.value = `${selectedYear}.`;
-      }
+      if(!cur) el.valid.value = `${selectedYear}.`;
     } else {
       el.validReqBadge.className = "sub";
       el.validReqBadge.textContent = "(amelyikhez kell)";
-      el.valid.value = "";
+      if(isAutoFilled) el.valid.value = "";
     }
   }
 
@@ -1152,8 +1179,17 @@
       const perm = await dirHandle.requestPermission({ mode:"readwrite" });
       if(perm!=="granted"){ banner("Nincs írási engedély a mappához – az áthelyezés nem fog működni."); }
       else banner("");
-      $1$2askRootAbsPath(false);
-$2$3
+
+      // JAVÍTVA: itt korábban egy elrontott keresés-csere maradványa állt
+      // (`$1$2askRootAbsPath(false); $2$3`). Mivel a `$` érvényes JS
+      // azonosító-karakter, ez NEM szintaktikai hiba volt, hanem futásidejű
+      // ReferenceError — amit a lenti catch elnyelt. Következmény: a
+      // listFiles() SOHA nem futott le, és az idbSet("lastDir") sem, ezért a
+      // "Folytatás" gomb sem tudott működni. Az app gyakorlatilag halott volt.
+      try{ await idbSet("lastDir", dirHandle); }catch(_){}
+      hideRestoreButton();
+      askRootAbsPath(false);
+      await listFiles();
     }catch(err){
       if(err && err.name==="AbortError") return;
       banner("Nem sikerült megnyitni a mappát: "+(err&&err.message||err));
@@ -1219,7 +1255,16 @@ $2$3
   }
 
   // ---- Fájl kiválasztás + előnézet ---------------------------------
+  // `selectToken`: a betöltés aszinkron (getFile → arrayBuffer → render). Ha a
+  // felhasználó gyorsan kattint két fájl között, a KORÁBBAN indult, de LASSABB
+  // betöltés fejezte be utoljára, és a saját képét tette ki — miközben curIdx
+  // már a másik fájlra mutatott. Így a felhasználó A fájl képét látta, de B
+  // fájlt nevezte át. Minden betöltés kap egy sorszámot, és csak az írhat a
+  // felületre, amelyik még a legfrissebb.
+  let selectToken = 0;
+
   async function selectFile(i){
+    const myToken = ++selectToken;
     curIdx = i;
     renderList();
     resetForm();
@@ -1231,25 +1276,35 @@ $2$3
     try{
       const f = files[i];
       const file = await f.handle.getFile();
+      if(myToken !== selectToken) return;              // elavult betöltés
       const ext = f.name.split(".").pop().toLowerCase();
       if(ext==="pdf"){
-        const canvas = await renderPdf(file);  ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
+        const canvas = await renderPdf(file);
+        if(myToken !== selectToken) return;
+        ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
       }else if(ext==="psd"){
-        const canvas = await renderPsd(file);  ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
+        const canvas = await renderPsd(file);
+        if(myToken !== selectToken) return;
+        ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
       }else if(ext==="tif" || ext==="tiff"){
-        const canvas = await renderTiff(file); ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
+        const canvas = await renderTiff(file);
+        if(myToken !== selectToken) return;
+        ocrSource = canvas; mountZoomable(canvas); el.ocr.disabled=false;
       }else if(IMG_EXT.includes(ext)){
         const url = URL.createObjectURL(file);
         const img = new Image(); img.src = url; await img.decode().catch(()=>{});
+        if(myToken !== selectToken){ URL.revokeObjectURL(url); return; }
+        curObjectUrl = url;                            // clearPreview() felszabadítja
         ocrSource = url;
         mountZoomable(img, img.naturalWidth||img.width||1, img.naturalHeight||img.height||1);
         el.ocr.disabled=false;
       }else{
-        showEmpty("Ehhez a formátumhoz (<b>." + ext + "</b>) nincs előnézet.<br>A fájl így is feldolgozható.");
+        showEmpty("Ehhez a formátumhoz (<b>." + escapeHtml(ext) + "</b>) nincs előnézet.<br>A fájl így is feldolgozható.");
         el.ocr.disabled=true;
       }
       setStatus("");
     }catch(err){
+      if(myToken !== selectToken) return;
       showEmpty("Nem sikerült megnyitni a fájlt előnézetre.<br>A fájl így is átnevezhető.");
       setStatus("Előnézet hiba: "+(err&&err.message||err),"warn");
     }
@@ -1257,13 +1312,22 @@ $2$3
 
   async function renderPdf(file){
     const buf = await file.arrayBuffer();
-    const pdf = await pdfjsLib.getDocument({ data:buf }).promise;
-    const page = await pdf.getPage(1);
-    const viewport = page.getViewport({ scale:2 });
-    const canvas = document.createElement("canvas");
-    canvas.width = viewport.width; canvas.height = viewport.height;
-    await page.render({ canvasContext:canvas.getContext("2d"), viewport }).promise;
-    return canvas;
+    const task = pdfjsLib.getDocument({ data:buf });
+    const pdf = await task.promise;
+    try{
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({ scale:2 });
+      const canvas = document.createElement("canvas");
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({ canvasContext:canvas.getContext("2d"), viewport }).promise;
+      return canvas;
+    } finally {
+      // A pdf.js worker a dokumentumot memóriában tartja, amíg destroy()-t nem
+      // hívunk. A kép ekkor már a canvas-on van, a dokumentum elengedhető —
+      // enélkül több száz fájl végignézése után elfogyott a memória.
+      try{ await pdf.cleanup(); }catch(_){}
+      try{ await pdf.destroy(); }catch(_){}
+    }
   }
 
   async function renderPsd(file){
@@ -1304,13 +1368,34 @@ $2$3
     const cx=(px-tx)/scale, cy=(py-ty)/scale;
     scale=s2; tx=px-cx*scale; ty=py-cy*scale; applyTransform();
   }
+  // MEMÓRIASZIVÁRGÁS JAVÍTÁSA: a képelőnézet URL.createObjectURL()-lel készül,
+  // amit korábban SOHA nem szabadítottunk fel. Minden megnyitott kép a
+  // memóriában maradt a lap bezárásáig — egy több száz szkennelt fájlos
+  // munkamenetben ez több GB-ot jelentett. Ezért tartjuk nyilván az aktuális
+  // blob-URL-t, és a következő előnézet előtt visszavonjuk.
+  let curObjectUrl = null;
+  function releaseObjectUrl(){
+    if(curObjectUrl){ try{ URL.revokeObjectURL(curObjectUrl); }catch(_){} curObjectUrl = null; }
+  }
+
   function clearPreview(){
+    releaseObjectUrl();
     const s=stageEl(); if(s){ s.innerHTML=""; s.style.display="none"; }
     const e=$("previewEmpty"); if(e) e.style.display="none";
     el.prev.classList.remove("zoomable","grabbing");
     const z=$("zoomCtl"); if(z) z.style.display="none";
     zoomable=false; panning=false;
   }
+  // Csak a néhány megmaradt, statikus HTML-t tartalmazó helyen használjuk
+  // (pl. az előnézet "nincs támogatás" üzenete). A fájlnév kiterjesztése
+  // hálózati megosztásról érkezve tartalmazhat `<` / `>` karaktert is.
+  function escapeHtml(str){
+    if(str == null) return "";
+    return String(str)
+      .replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;")
+      .replace(/"/g, "&quot;").replace(/'/g, "&#039;");
+  }
+
   function showEmpty(html){ clearPreview(); const e=$("previewEmpty"); e.innerHTML=html; e.style.display="block"; }
   function mountZoomable(node,w,h){
     const s=stageEl(); s.innerHTML=""; s.appendChild(node);
@@ -1480,11 +1565,35 @@ $2$3
     });
   });
 
+  // ── FÁJLNÉV-TISZTÍTÁS ──────────────────────────────────────────────
+  // A korábbi változat csak a Windows tiltott karaktereit szűrte. Hiányzott:
+  //  · vezérlőkarakterek (0x00–0x1F) — az OCR-ből simán bekerülhetnek, és a
+  //    Windows a fájlnévben hibával utasítja el őket;
+  //  · fenntartott eszköznevek (CON, PRN, AUX, NUL, COM1-9, LPT1-9) — ilyen
+  //    nevű fájlt a Windows egyáltalán nem enged létrehozni;
+  //  · záró SZÓKÖZ (nem csak a pont) — az NTFS csendben levágja, ami után a
+  //    duplikátum-ellenőrzés más nevet lát, mint ami a lemezre került;
+  //  · hosszkorlát — az NTFS 255 karakteres neve fölött a mentés elszáll.
+  const WIN_RESERVED = /^(con|prn|aux|nul|com[1-9]|lpt[1-9])$/i;
+  const MAX_BASE_LEN = 180;   // + kiterjesztés + " (12)" ütköző-utótag is beleférjen
+
+  function stripUnsafe(s){
+    return String(s == null ? "" : s)
+      .replace(/[\x00-\x1F\x7F]/g, "")   // vezérlőkarakterek
+      .replace(/[\\\/:*?"<>|]/g, "")           // Windows tiltott karakterek
+      .replace(/\s+/g, " ")
+      .trim();
+  }
   function sanitizeValidity(v){
-    return v.replace(/[\\\/:*?"<>|]/g,"").replace(/\s+/g," ").trim();
+    return stripUnsafe(v);
   }
   function sanitize(s){
-    return s.replace(/[\\\/:*?"<>|]/g,"").replace(/\s+/g," ").replace(/\.+$/,"").trim();
+    let out = stripUnsafe(s).replace(/[. ]+$/, "");
+    if(out.length > MAX_BASE_LEN){
+      out = out.slice(0, MAX_BASE_LEN).trim().replace(/[. ]+$/, "");
+    }
+    if(WIN_RESERVED.test(out)) out = "_" + out;
+    return out;
   }
   function buildBaseName(){
     const whole = el.whole.value.trim();
@@ -1528,7 +1637,16 @@ $2$3
   el.rename.onclick = doFinish;
   el.skip.onclick = ()=>{ const n=nextUndone(); if(n>=0) selectFile(n); };
 
+  // `isFinishing`: a doFinish-t három helyről is el lehet indítani (Kész gomb,
+  // Enter a név/érvényesség/egyben mezőben, Enter az útvonal mezőben, jobbklikk
+  // menü). Két gyors Enter → két PÁRHUZAMOS áthelyezés UGYANARRA a fájlra: az
+  // első átmozgatja, a második vagy hibára fut, vagy " (2)" utótaggal még egy
+  // másolatot hoz létre, és két előzmény-bejegyzést ír. Ezért egyszerre csak
+  // egy művelet futhat, és közben a felület kattinthatatlan.
+  let isFinishing = false;
+
   async function doFinish(){
+    if(isFinishing) return;
     if(curIdx<0) return;
     clearValidationErrors();
 
@@ -1571,6 +1689,9 @@ $2$3
     const ext = extOf(f.name);
     if(!base){ setStatus("Hiányzik a név vagy a típus.","err"); return; }
 
+    isFinishing = true;
+    document.body.classList.add("busy");
+    el.rename.disabled = true; el.skip.disabled = true;
     try{
       setStatus("Fájl áthelyezése és átnevezése…");
       const targetDirHandle = await getTargetDirectoryHandle(typeVal, pathVal);
@@ -1590,18 +1711,19 @@ $2$3
       markDone();
 
       // A fájl EKKOR MÁR átkerült az új néven a célmappába (a move/copy+delete
-      // lefutott, hiba nélkül) → MOST, és CSAK most égetjük be az API-ba a
-      // célmappa TELJES útvonalát, pl.  D:\CsSzabj\PROHUMAN\összevont adóelőleg
+      // lefutott, hiba nélkül) → MOST, és CSAK most jegyezzük meg a célmappa
+      // TELJES útvonalát, pl.  D:\CsSzabj\PROHUMAN\összevont adóelőleg
+      // Így csak bizonyítottan működő útvonal kerül a javaslatok közé.
       let finalPath = await absPathForTarget(targetDirHandle, pathVal, typeVal);
       if(!finalPath) finalPath = pathVal || targetDirHandle.name;
 
-      let apiSaved = false;
+      let pathSaved = false;
       if(typeVal && finalPath){
         const pinp = $("path-input-" + slugify(typeVal));
         if(pinp && normAbs(pinp.value) !== normAbs(finalPath)) pinp.value = finalPath;
         docPaths[typeVal] = finalPath;
         saveDocPaths();
-        apiSaved = await savePathSuggestionForType(typeVal, finalPath);
+        pathSaved = savePathSuggestionForType(typeVal, finalPath);
       }
 
       addHistoryEntry({
@@ -1616,14 +1738,27 @@ $2$3
 
       setStatus(
         "Sikeresen áthelyezve: " + targetFileName + " ➔ " + finalPath +
-        (typeVal ? (apiSaved ? "  ·  útvonal elmentve az API-ba ✓" : "  ·  ⚠ az API-mentés NEM sikerült") : ""),
-        (!typeVal || apiSaved) ? "ok" : "warn"
+        (typeVal && !pathSaved ? "  ·  ⚠ az útvonalat nem sikerült megjegyezni" : ""),
+        (!typeVal || pathSaved) ? "ok" : "warn"
       );
       goNext();
     }catch(err){
       setStatus("Hiba az áthelyezés során: "+(err&&err.message||err),"err");
+    }finally{
+      isFinishing = false;
+      document.body.classList.remove("busy");
+      el.skip.disabled = curIdx < 0;
+      updatePreview();
     }
   }
+
+  // Ha a lap bezárul egy futó áthelyezés közben, a fájl a másolás és a törlés
+  // KÖZÖTT ragadhat. Ilyenkor a böngésző rákérdez a kilépésre.
+  window.addEventListener("beforeunload", (e) => {
+    if(!isFinishing) return;
+    e.preventDefault();
+    e.returnValue = "";
+  });
 
   async function getTargetDirectoryHandle(typeVal, pathVal){
     // 1. Mentett mappa elérése (Indexing / korábbi Mappa... választás)
@@ -1638,45 +1773,106 @@ $2$3
       }
     }catch(_){}
 
-    if(!dirHandle) return null;
+    if(!dirHandle) return await pickTargetDir(typeVal);
 
-    // 2. Célmappa nevének kinyerése
-    const rawPath = pathVal.trim();
-    const clean = rawPath.replace(/[\\/]+/g, "/");
-    const parts = clean.split("/").filter(p => p && !p.includes(":") && p !== ".");
-    let targetFolderName = parts.length ? parts[parts.length - 1] : typeVal;
-    if(!targetFolderName) targetFolderName = typeVal;
+    // 2. Az ÚTVONAL FELOLDÁSA
+    //
+    // ITT VOLT A LEGSÚLYOSABB CSENDES HIBA. A korábbi kód így dolgozott:
+    //     parts = útvonal szétvágva, a ":"-ot tartalmazó rész eldobva
+    //     targetFolderName = parts[parts.length - 1]        ← CSAK AZ UTOLSÓ!
+    //     dirHandle.getDirectoryHandle(targetFolderName, { create:true })
+    //
+    // Vagyis ha megnyitottad a  D:\szkennelt  mappát, és beírtad célnak, hogy
+    //     D:\CsSzabj\PROHUMAN\tp
+    // akkor a kód ebből csak a "tp"-t vette, és létrehozott egy ÚJ mappát:
+    //     D:\szkennelt\tp
+    // A fájl oda került, miközben a felület és az előzmény is azt írta ki, hogy
+    // "D:\CsSzabj\PROHUMAN\tp". A dokumentum tehát némán rossz helyre került.
+    //
+    // Az új logika a TELJES útvonalat végigjárja, és csak akkor old fel, ha az
+    // tényleg a megnyitott gyökér alatt van. Ha nem oda mutat, NEM tippel és
+    // NEM hoz létre semmit — hanem megkérdezi a felhasználót.
+    const rawPath = String(pathVal || "").trim();
 
-    // 3. Meglévő vagy új célmappa nyitása dirHandle-ben
-    if(dirHandle){
+    if(rawPath){
+      const segs = pathSegmentsUnderRoot(rawPath);
+      if(segs === null){
+        setStatus(`A(z) '${rawPath}' útvonal a megnyitott mappán kívül van – válaszd ki egyszer a célmappát.`, "warn");
+        return await pickTargetDir(typeVal, rawPath);
+      }
       try{
-        return await dirHandle.getDirectoryHandle(targetFolderName, { create: true });
-      }catch(_){}
-    }
-
-    // 4. Ha a nyitott mappán kívül van, megnyitjuk a mappa-választót
-    if(window.showDirectoryPicker){
-      try {
-        setStatus(`Válaszd ki a(z) '${typeVal}' célmappát a gépeden!`, "warn");
-        const handle = await window.showDirectoryPicker({ mode:"readwrite" });
-        const perm = await handle.requestPermission({ mode:"readwrite" });
-        if(perm === "granted"){
-          await idbSet("docDir_" + typeVal, handle);
-          const absSel = await absPathForTarget(handle, "", typeVal);
-          const inp = $("path-input-" + slugify(typeVal));
-          if(inp) inp.value = absSel || handle.name;
-          docPaths[typeVal] = absSel || handle.name;
-          saveDocPaths();
-          // FIGYELEM: itt SZÁNDÉKOSAN NINCS API-mentés — csak a tényleges,
-          // sikeres átnevezés+áthelyezés után mentünk (lásd doFinish).
-          return handle;
-        }
-      } catch(pickErr) {
-        console.warn("Mappaválasztás megszakítva:", pickErr);
+        return await resolveDirPath(dirHandle, segs, true);
+      }catch(err){
+        console.warn("Útvonal feloldása sikertelen:", err);
+        return await pickTargetDir(typeVal, rawPath);
       }
     }
 
+    // 3. Nincs megadott útvonal → a típus nevű almappa a gyökér alatt
+    try{
+      return await dirHandle.getDirectoryHandle(typeVal, { create: true });
+    }catch(_){}
+
+    return await pickTargetDir(typeVal);
+  }
+
+  /**
+   * A megadott útvonalat a MEGNYITOTT gyökérhez képesti szegmensekre bontja.
+   *  · relatív útvonal            → a szegmensek listája
+   *  · abszolút, a gyökér alatt   → a gyökér utáni szegmensek
+   *  · abszolút, máshol           → null (a böngésző nem tud tetszőleges
+   *                                 abszolút útvonalat megnyitni, tippelni
+   *                                 pedig veszélyes lenne)
+   */
+  function pathSegmentsUnderRoot(rawPath){
+    const p = normAbs(rawPath);
+    if(!p) return [];
+    const split = s => s.split("\\").filter(x => x && x !== ".");
+
+    if(!isAbsPath(p)) return split(p);
+
+    const root = normAbs(rootAbsPath);
+    if(root){
+      const lp = p.toLowerCase(), lr = root.toLowerCase();
+      if(lp === lr) return [];
+      if(lp.startsWith(lr + "\\")) return split(p.slice(root.length + 1));
+    }
     return null;
+  }
+
+  /** Végigjárja a szegmenseket a gyökértől; `create` esetén létre is hozza. */
+  async function resolveDirPath(root, segments, create){
+    let cur = root;
+    for(const seg of segments){
+      if(seg === "..") throw new Error("A '..' nem használható az útvonalban.");
+      cur = await cur.getDirectoryHandle(seg, { create: !!create });
+    }
+    return cur;
+  }
+
+  /** Explicit mappaválasztás, a kiválasztott mappa elmentésével a típushoz. */
+  async function pickTargetDir(typeVal, hintPath){
+    if(!window.showDirectoryPicker) return null;
+    try {
+      setStatus(`Válaszd ki a(z) '${typeVal}' célmappát a gépeden!`, "warn");
+      const handle = await window.showDirectoryPicker({ mode:"readwrite" });
+      const perm = await handle.requestPermission({ mode:"readwrite" });
+      if(perm !== "granted") return null;
+
+      await idbSet("docDir_" + typeVal, handle);
+      const absSel = await absPathForTarget(handle, hintPath || "", typeVal);
+      const inp = $("path-input-" + slugify(typeVal));
+      if(inp) inp.value = absSel || handle.name;
+      docPaths[typeVal] = absSel || handle.name;
+      saveDocPaths();
+      // FIGYELEM: itt SZÁNDÉKOSAN NINCS javaslat-mentés — csak a tényleges,
+      // sikeres átnevezés+áthelyezés után mentünk (lásd doFinish).
+      return handle;
+    } catch(pickErr) {
+      if(pickErr && pickErr.name === "AbortError") return null;
+      console.warn("Mappaválasztás megszakítva:", pickErr);
+      return null;
+    }
   }
 
   async function moveFileToDirectory(fileHandle, targetDirHandle, newFileName, sourceDirHandle){
@@ -1735,6 +1931,10 @@ $2$3
   // ---- Űrlap reset --------------------------------------------------
   function resetForm(){
     el.name.value="";
+    // Új fájl → az érvényesség mindig induljon tisztán. (Az
+    // updateValidityRequirement már NEM töröl kézi bevitelt, ezért itt
+    // kell explicit üríteni, különben átszivárogna az előző dokumentumról.)
+    el.valid.value="";
     selectedType=""; updateTypeRowSelection(); updateValidityRequirement();
     el.whole.value="";
     el.ocrText.textContent=""; el.prog.style.width="0%"; el.pct.textContent="";
@@ -1863,19 +2063,28 @@ $2$3
     } catch(_) {}
   }
 
-  async function loadHistoryFromApi(){
-    try {
-      let resp = await apiFetch('/api/history').catch(() => null);
-      if(resp && resp.ok){
-        const apiData = await resp.json();
-        if(Array.isArray(apiData)){
-          historyList = apiData.filter(item => item.id && !item.id.includes("demo"));
-          historyList.sort((a,b) => new Date(b.isoDate || 0) - new Date(a.isoDate || 0));
-          saveHistory();
-          renderHistoryList();
-        }
-      }
-    } catch(err) {}
+  // A szerver sanitizeHistoryEntry-jével azonos fehérlista. Minden kívülről
+  // érkező előzményre (API-válasz, JSON-import) alkalmazzuk: csak az ismert
+  // mezők maradnak, szövegre kényszerítve, hosszkorláttal.
+  function hStr(v, max){
+    if(typeof v !== "string") return "";
+    return v.replace(/[\x00-\x1F\x7F]/g, "").trim().slice(0, max || 300);
+  }
+  function sanitizeHistoryItem(raw){
+    if(!raw || typeof raw !== "object" || Array.isArray(raw)) return null;
+    return {
+      id:         hStr(raw.id, 64) || ("hist_" + Date.now() + "_" + Math.random().toString(36).slice(2, 9)),
+      origName:   hStr(raw.origName),
+      newName:    hStr(raw.newName),
+      personName: hStr(raw.personName, 120),
+      type:       hStr(raw.type, 80),
+      validity:   hStr(raw.validity, 60),
+      year:       hStr(raw.year, 8),
+      targetPath: hStr(raw.targetPath, 400),
+      isoDate:    hStr(raw.isoDate, 40),
+      date:       hStr(raw.date, 40),
+      time:       hStr(raw.time, 40)
+    };
   }
 
   function addHistoryEntry(entry){
@@ -1896,68 +2105,92 @@ $2$3
     historyList.unshift(item);
     if(historyList.length > 500) historyList = historyList.slice(0, 500);
     saveHistory();
-
-    try {
-      apiFetch('/api/history', {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(item)
-      }).catch(() => {});
-    } catch(_) {}
+    // A bejegyzés a böngészőben marad. Átvitelhez az Előzmény ablak
+    // JSON Export / JSON Import gombjai használhatók.
   }
 
-  function escapeHtml(str){
-    if(!str) return "";
-    return String(str)
-      .replace(/&/g, "&amp;")
-      .replace(/</g, "&lt;")
-      .replace(/>/g, "&gt;")
-      .replace(/"/g, "&quot;")
-      .replace(/'/g, "&#039;");
+  // ── ELŐZMÉNY-LISTA KIRAJZOLÁSA ─────────────────────────────────────
+  // BIZTONSÁGI ÁTÍRÁS (tárolt XSS). A korábbi verzió sablonliterálból rakta
+  // össze a HTML-t, és az `item.id`-t ESCAPE NÉLKÜL írta bele egy inline
+  // onclick attribútumba:  onclick="copyPathForHistory('${item.id}')"
+  // Az id-t viszont nem csak mi állítjuk elő: a szerver megtartja a kliens
+  // által küldött id-t, és JSON-importból is jöhet. Így egy ilyen bejegyzés…
+  //     { "id": "');alert(document.cookie);//" }
+  // …tetszőleges JS-t futtatott MINDENKINÉL, aki megnyitotta az előzményeket —
+  // egy olyan oldalon, aminek hozzáférése van a felhasználó fájlrendszeréhez.
+  // Megoldás: nincs többé HTML-összefűzés. Minden csomópont createElement +
+  // textContent, a gombok pedig closure-ön keresztül kapják meg a `item`
+  // objektumot, így az id SOHA nem kerül értelmezhető kontextusba.
+  function hEl(tag, cls, text){
+    const n = document.createElement(tag);
+    if(cls) n.className = cls;
+    if(text != null) n.textContent = text;
+    return n;
+  }
+  function hField(icon, label, value){
+    const d = document.createElement("div");
+    d.append(icon + " ");
+    d.appendChild(hEl("b", null, label + ":"));
+    d.append(" " + (value || "—"));
+    return d;
+  }
+
+  function buildHistoryCard(item){
+    const card = hEl("div", "history-item");
+
+    const head = hEl("div", "history-header");
+    head.appendChild(hEl("span", "history-type-badge", item.type || "Dokumentum"));
+    head.appendChild(hEl("span", "history-time", "🗓️ " + (item.date || "") + " " + (item.time || "")));
+    card.appendChild(head);
+
+    const files = hEl("div", "history-files");
+    const from = hEl("span", null, item.origName || "");
+    from.style.cssText = "color:var(--muted);font-weight:normal";
+    const to = hEl("span", null, item.newName || "");
+    to.style.cssText = "color:var(--accent-d);font-weight:700";
+    files.appendChild(from); files.append(" ➔ "); files.appendChild(to);
+    card.appendChild(files);
+
+    const grid = hEl("div", "history-details-grid");
+    grid.style.cssText = "display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:var(--muted);margin-top:2px;";
+    grid.appendChild(hField("👤", "Név", item.personName));
+    grid.appendChild(hField("📅", "Érvényesség", item.validity));
+    grid.appendChild(hField("📁", "Célmappa", item.targetPath || item.type));
+    grid.appendChild(hField("🏷️", "Év", item.year));
+    card.appendChild(grid);
+
+    const acts = hEl("div", "history-actions");
+    const mk = (cls, label, title, fn) => {
+      const b = hEl("button", cls, label);
+      b.type = "button"; b.title = title;
+      b.addEventListener("click", () => fn(item));
+      return b;
+    };
+    acts.appendChild(mk("btn-sm primary", "📁 Megnyitás az Intézőben", "Mappa megnyitása / útvonal másolása", openFolderForHistory));
+    acts.appendChild(mk("btn-sm", "📋 Útvonal", "Célmappa útvonalának másolása", copyPathForHistory));
+    acts.appendChild(mk("btn-sm", "📄 Új név másolása", "Új fájlnév másolása", copyNewNameForHistory));
+    card.appendChild(acts);
+
+    return card;
   }
 
   function renderHistoryList(){
     const container = $("historyListContainer");
     if(!container) return;
-
+    container.textContent = "";
     if(!historyList.length){
-      container.innerHTML = `<div style="text-align:center;color:var(--muted);padding:36px 10px;">Még nincsenek átnevezett vagy áthelyezett fájlok az előzményekben.</div>`;
+      const empty = hEl("div", null, "Még nincsenek átnevezett vagy áthelyezett fájlok az előzményekben.");
+      empty.style.cssText = "text-align:center;color:var(--muted);padding:36px 10px;";
+      container.appendChild(empty);
       return;
     }
 
-    container.innerHTML = historyList.map(item => `
-      <div class="history-item">
-        <div class="history-header">
-          <span class="history-type-badge">${escapeHtml(item.type || 'Dokumentum')}</span>
-          <span class="history-time">🗓️ ${escapeHtml(item.date || '')} ${escapeHtml(item.time || '')}</span>
-        </div>
-        <div class="history-files">
-          <span style="color:var(--muted);font-weight:normal">${escapeHtml(item.origName)}</span> ➔ 
-          <span style="color:var(--accent-d);font-weight:700">${escapeHtml(item.newName)}</span>
-        </div>
-        <div class="history-details-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:4px;font-size:12px;color:var(--muted);margin-top:2px;">
-          <div>👤 <b>Név:</b> ${escapeHtml(item.personName || '—')}</div>
-          <div>📅 <b>Érvényesség:</b> ${escapeHtml(item.validity || '—')}</div>
-          <div>📁 <b>Célmappa:</b> ${escapeHtml(item.targetPath || item.type)}</div>
-          <div>🏷️ <b>Év:</b> ${escapeHtml(item.year || '—')}</div>
-        </div>
-        <div class="history-actions">
-          <button type="button" class="btn-sm primary" onclick="openFolderForHistory('${item.id}')" title="Mappa megnyitása / útvonal másolása">
-            📁 Megnyitás az Intézőben
-          </button>
-          <button type="button" class="btn-sm" onclick="copyPathForHistory('${item.id}')" title="Célmappa útvonalának másolása">
-            📋 Útvonal
-          </button>
-          <button type="button" class="btn-sm" onclick="copyNewNameForHistory('${item.id}')" title="Új fájlnév másolása">
-            📄 Új név másolása
-          </button>
-        </div>
-      </div>
-    `).join('');
+    const frag = document.createDocumentFragment();
+    historyList.forEach(item => frag.appendChild(buildHistoryCard(item)));
+    container.appendChild(frag);
   }
 
-  window.openFolderForHistory = async function(id){
-    const item = historyList.find(x => x.id === id);
+  async function openFolderForHistory(item){
     if(!item) return;
 
     const pathText = item.targetPath || item.type;
@@ -1987,10 +2220,9 @@ $2$3
       alert(`Célmappa útvonala másolva a vágólapra:\n${pathText}\n\nNyomd meg a Win + R billentyűkombinációt (vagy illeszd be az Intézőbe), majd nyomj Entert a megnyitáshoz!`);
       setStatus(`Útvonal másolva a vágólapra: ${pathText}`, "ok");
     }
-  };
+  }
 
-  window.copyPathForHistory = async function(id){
-    const item = historyList.find(x => x.id === id);
+  async function copyPathForHistory(item){
     if(!item) return;
     const pathText = item.targetPath || item.type;
     try {
@@ -1999,10 +2231,9 @@ $2$3
     } catch(e) {
       setStatus(`Másolási hiba: ${e.message}`, "err");
     }
-  };
+  }
 
-  window.copyNewNameForHistory = async function(id){
-    const item = historyList.find(x => x.id === id);
+  async function copyNewNameForHistory(item){
     if(!item) return;
     try {
       await navigator.clipboard.writeText(item.newName);
@@ -2010,7 +2241,7 @@ $2$3
     } catch(e) {
       setStatus(`Másolási hiba: ${e.message}`, "err");
     }
-  };
+  }
 
   function exportHistoryJson(){
     if(!historyList.length){
@@ -2024,7 +2255,7 @@ $2$3
     document.body.appendChild(dlAnchor);
     dlAnchor.click();
     dlAnchor.remove();
-    setStatus("Előzmények sikeresen letöltve history_api.json fájlként! (GitHub / Netlify API-hoz)", "ok");
+    setStatus("Előzmények letöltve history_api.json fájlként.", "ok");
   }
 
   function importHistoryJsonFile(file){
@@ -2034,10 +2265,16 @@ $2$3
       try {
         const imported = JSON.parse(e.target.result);
         if(Array.isArray(imported)){
-          historyList = imported;
+          // A beolvasott fájl külső, nem megbízható forrás. Ugyanazt a
+          // fehérlistát alkalmazzuk rá, mint a szerver a beérkező adatra:
+          // csak az ismert mezők maradnak, szövegre kényszerítve és
+          // hosszkorlátozva. Így egy elrontott vagy szándékosan preparált
+          // export nem tudja se megkerülni a megjelenítést, se telezabálni
+          // a localStorage-ot.
+          historyList = imported.slice(0, 500).map(sanitizeHistoryItem).filter(Boolean);
           saveHistory();
           renderHistoryList();
-          setStatus(`${imported.length} előzmény beolvasva a JSON fájlból!`, "ok");
+          setStatus(`${historyList.length} előzmény beolvasva a JSON fájlból!`, "ok");
         } else {
           alert("Érvénytelen JSON formátum! Egy előzmény listát tartalmazó JSON tömbre (Array) van szükség.");
         }
@@ -2052,14 +2289,20 @@ $2$3
 
   function openHistoryModal(){
     renderHistoryList();
-    loadHistoryFromApi();
     const modal = getHistoryModal();
     if(modal) modal.classList.add("active");
   }
 
-  // Automatikus API betöltés az indításkor
-  loadHistoryFromApi();
-  loadTypesFromApi();
+  // ---- Indítás ------------------------------------------------------
+  // Nincs hálózati betöltés: minden adat a böngészőből jön (localStorage,
+  // IndexedDB), amit a szkript elején már beolvastunk.
+
+  // A Tesseract worker külön szálat és több tíz MB WASM-heapet tart életben.
+  // Lapelhagyáskor elengedjük, hogy ne maradjon árva folyamat.
+  window.addEventListener("pagehide", () => {
+    releaseObjectUrl();
+    if(ocrWorker){ try{ ocrWorker.terminate(); }catch(_){} ocrWorker = null; }
+  });
 
   function closeHistoryModal(){
     const modal = getHistoryModal();

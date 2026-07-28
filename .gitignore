@@ -1,2 +1,16 @@
 node_modules/
 .netlify/
+
+# Titkok — SOHA ne kerüljenek verziókövetésbe
+.env
+.env.*
+!.env.example
+
+# A helyi backend előzményfájlja SZEMÉLYES ADATOT tartalmaz (nevek,
+# dokumentumtípusok, lemezes útvonalak). Verziókövetésbe kerülve
+# visszavonhatatlanul bekerülne a git történetbe.
+history_api.json
+
+# Atomi írás közbeni ideiglenes fájlok
+*.tmp
+*.[0-9]*.tmp
