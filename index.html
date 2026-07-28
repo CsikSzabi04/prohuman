@@ -845,19 +845,13 @@
 
       const getSuggestions = () => {
         const set = new Set();
-        if(docPaths[t]) set.add(docPaths[t]);
-
         const apiSugg = (typesApiData && typesApiData.pathSuggestions && typesApiData.pathSuggestions[t]) || [];
-        apiSugg.forEach(s => { if(s) set.add(s); });
-
-        if(typeof historyList !== 'undefined' && Array.isArray(historyList)){
-          historyList.forEach(item => {
-            if(item.type === t && item.targetPath) set.add(item.targetPath);
-          });
-        }
+        apiSugg.forEach(s => {
+          if(s && typeof s === 'string' && s.trim()) set.add(s.trim());
+        });
 
         const query = input.value.trim().toLowerCase();
-        return Array.from(set).filter(s => s && s.toLowerCase() !== t.toLowerCase() && (!query || s.toLowerCase().includes(query)));
+        return Array.from(set).filter(s => !query || s.toLowerCase().includes(query));
       };
 
       const renderDropdown = () => {
