@@ -1,0 +1,17 @@
+{
+  "docTypes": [
+    "munkába járás",
+    "tp",
+    "pótszabi",
+    "szerződés csomag",
+    "országbérlet",
+    "vármegyebérlet",
+    "adóelőleg",
+    "összevont adóelőleg"
+  ],
+  "pathSuggestions": {
+    "x": [
+      "D:\\A\\B"
+    ]
+  }
+}

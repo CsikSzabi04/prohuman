@@ -477,24 +477,25 @@
     } catch(_) {}
   }
 
-  // ── HELYI TÁROLÁS (nincs hálózati kapcsolat) ────────────────────────
-  //
-  // Ez az alkalmazás SEMMILYEN adatot nem küld ki a gépről. Korábban minden
-  // átnevezéskor kiment a személynév, a dokumentumtípus és a lemezes útvonal
-  // egy publikus API-ra — ott hitelesítés nélkül bárki elolvashatta. Mivel a
-  // programot egy helyen használják, a gépek közti szinkronra nincs szükség,
-  // így a legegyszerűbb és egyben legbiztonságosabb megoldás maradt: minden
-  // adat a böngészőben marad.
-  //
-  // Ami a helyén maradt:
-  //   · előzmény             → localStorage  (+ kézi JSON export/import)
-  //   · útvonal-javaslatok   → localStorage
-  //   · dokumentumtípusok    → localStorage
-  //   · mappa-engedélyek     → IndexedDB
-  //
-  // Ha később mégis kellene több gép közötti szinkron, ide kerülne vissza egy
-  // hitelesített API-hívás — de akkor a kiszolgálót is védeni KELL, különben
-  // a személyes adat újra kikerül a nyílt internetre.
+  // ── API HOZZÁFÉRÉS ─────────────────────────────────────────────────
+  // PONTOSAN EGY végpont van. A legelső verzió SORBAN végigpróbálta ugyanazt
+  // a kérést három címen (saját origin → proscanner.netlify.app →
+  // localhost:88), amíg 2xx-et nem kapott — vagyis EGY mentés a személynevet
+  // akár HÁROM külön kiszolgálónak is elküldte. Ez maradt ki.
+  function apiBase(){
+    // HTTP(S)-en kiszolgálva a saját origin a mérvadó; file:// esetén a
+    // Netlify-ra megyünk, mert ott van a függvény.
+    if (location.protocol === "http:" || location.protocol === "https:") return location.origin;
+    return "https://proscanner.netlify.app";
+  }
+
+  async function apiFetch(endpoint, options = {}) {
+    const opts = Object.assign({}, options);
+    opts.cache = "no-store";
+    opts.credentials = "omit";
+    opts.referrerPolicy = "no-referrer";
+    return fetch(apiBase() + endpoint, opts);
+  }
 
   // ── ABSZOLÚT ÚTVONAL ────────────────────────────────────────────────
   // A böngésző (File System Access API) BIZTONSÁGI OKBÓL nem adja meg a mappa
@@ -573,11 +574,17 @@
     return normAbs(pathVal) || folder;
   }
 
-  // Útvonal-javaslat mentése — kizárólag a böngésző localStorage-ába.
-  // Ugyanaz a szabály, mint korábban a szerveren: CSAK teljes útvonalat
-  // tárolunk (pl. D:\CsSzabj\PROHUMAN\tp), mert a puszta mappanév ("tp")
-  // javaslatként használhatatlan.
-  function savePathSuggestionForType(t, pathVal){
+  // Útvonal-javaslat mentése: előbb helyben, majd az API-ba.
+  // Ugyanaz a szabály, mint a szerveren: CSAK teljes útvonalat tárolunk
+  // (pl. D:\CsSzabj\PROHUMAN\tp), mert a puszta mappanév ("tp") javaslatként
+  // használhatatlan. A kliens és a szerver szabálya AZONOS — korábban itt
+  // csak a hosszt néztük, így a legördülőben olyan javaslat jelent meg,
+  // amit a szerver eldobott, és a másik gépen sosem bukkant fel.
+  //
+  // A mentés MINDIG lefut (a szerveroldali összefésülés idempotens). Korábban
+  // a „csak ha még nincs a lokális listában” feltétel miatt egy sikertelen
+  // mentés SOHA nem próbálkozott újra → az útvonal örökre elveszett.
+  async function savePathSuggestionForType(t, pathVal){
     const cleanPath = normAbs(pathVal);
     if(!t || !cleanPath || cleanPath.length < 3 || !isAbsPath(cleanPath)) return false;
 
@@ -587,22 +594,73 @@
 
     const bucket = typesApiData.pathSuggestions[t];
     if(bucket.length < MAX_PATHS_PER_TYPE && !bucket.includes(cleanPath)) bucket.push(cleanPath);
+    try { localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData)); } catch(_){}
 
-    try {
-      localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData));
-      return true;
-    } catch(err) {
-      // Tele van a tárhely — ezt nem nyeljük el némán, mert innentől
-      // egyetlen javaslat sem mentődne el.
-      console.error("Nem sikerült elmenteni az útvonal-javaslatot:", err);
+    try{
+      const res = await apiFetch('/api/types', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docTypes: docTypes, pathSuggestions: { [t]: [cleanPath] } })
+      });
+      if(!res || !res.ok) return false;
+      const data = await res.json().catch(() => null);
+      // Csak akkor mondjuk sikeresnek, ha a szerver VISSZAIGAZOLTA a tárolást.
+      return !!(data && data.pathSuggestions && Array.isArray(data.pathSuggestions[t])
+        && data.pathSuggestions[t].includes(cleanPath));
+    }catch(err){
+      console.error("Hiba az API mentés során:", err);
       return false;
     }
   }
 
-  // Mennyiségi korlátok a localStorage védelmére: egy hosszú munkamenet
-  // vagy egy hibás JSON-import se tudja telezabálni a tárhelyet.
+  // A távoli API válaszát NEM tekintjük megbízhatónak: mennyiségi és formai
+  // korlátokat teszünk rá. Enélkül egy elrontott vagy rosszindulatú válasz
+  // korlátlanul feltölthetné a típuslistát és a localStorage-ot, amíg az
+  // kvótahibával el nem száll — és a felület használhatatlanná válna.
   const MAX_TYPES = 200, MAX_TYPE_LEN = 80;
   const MAX_PATHS_PER_TYPE = 50, MAX_PATH_LEN = 400;
+
+  function isSaneType(t){
+    return typeof t === "string" && t.trim().length > 0 && t.length <= MAX_TYPE_LEN;
+  }
+  function isSanePath(p){
+    return typeof p === "string" && p.trim().length >= 3 && p.length <= MAX_PATH_LEN;
+  }
+
+  async function loadTypesFromApi(){
+    try {
+      const resp = await apiFetch('/api/types').catch(() => null);
+      if(!resp || !resp.ok) return;
+      const data = await resp.json().catch(() => null);
+      if(!data || typeof data !== 'object') return;
+
+      if(data.pathSuggestions && typeof data.pathSuggestions === 'object'){
+        Object.keys(data.pathSuggestions).slice(0, MAX_TYPES).forEach(t => {
+          if(!isSaneType(t)) return;
+          const incoming = data.pathSuggestions[t];
+          if(!Array.isArray(incoming)) return;
+          if(!Array.isArray(typesApiData.pathSuggestions[t])) typesApiData.pathSuggestions[t] = [];
+          const bucket = typesApiData.pathSuggestions[t];
+          incoming.forEach(s => {
+            if(!isSanePath(s)) return;
+            const v = s.trim();
+            if(bucket.length < MAX_PATHS_PER_TYPE && !bucket.includes(v)) bucket.push(v);
+          });
+        });
+        try{ localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData)); }catch(_){}
+      }
+
+      if(Array.isArray(data.docTypes) && data.docTypes.length > 0){
+        let hasNew = false;
+        data.docTypes.forEach(t => {
+          if(!isSaneType(t)) return;
+          const v = t.trim();
+          if(docTypes.length < MAX_TYPES && !docTypes.includes(v)){ docTypes.push(v); hasNew = true; }
+        });
+        if(hasNew){ saveDocTypes(); buildTypeRows(); }
+      }
+    } catch(err) {}
+  }
   // ---- Elemek -------------------------------------------------------
   const $ = id => document.getElementById(id);
   const el = {
@@ -1719,7 +1777,7 @@
         if(pinp && normAbs(pinp.value) !== normAbs(finalPath)) pinp.value = finalPath;
         docPaths[typeVal] = finalPath;
         saveDocPaths();
-        pathSaved = savePathSuggestionForType(typeVal, finalPath);
+        pathSaved = await savePathSuggestionForType(typeVal, finalPath);
       }
 
       addHistoryEntry({
@@ -1734,7 +1792,7 @@
 
       setStatus(
         "Sikeresen áthelyezve: " + targetFileName + " ➔ " + finalPath +
-        (typeVal && !pathSaved ? "  ·  ⚠ az útvonalat nem sikerült megjegyezni" : ""),
+        (typeVal ? (pathSaved ? "  ·  útvonal elmentve ✓" : "  ·  ⚠ az útvonal mentése nem sikerült") : ""),
         (!typeVal || pathSaved) ? "ok" : "warn"
       );
       goNext();
@@ -2101,8 +2159,33 @@
     historyList.unshift(item);
     if(historyList.length > 500) historyList = historyList.slice(0, 500);
     saveHistory();
-    // A bejegyzés a böngészőben marad. Átvitelhez az Előzmény ablak
-    // JSON Export / JSON Import gombjai használhatók.
+
+    // Az API-mentés "tűz és felejtsd el": ha nem megy át, a helyi másolat
+    // akkor is megvan, tehát nem tartjuk fel vele a munkafolyamatot.
+    try {
+      apiFetch('/api/history', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(item)
+      }).catch(() => {});
+    } catch(_) {}
+  }
+
+  async function loadHistoryFromApi(){
+    try {
+      const resp = await apiFetch('/api/history').catch(() => null);
+      if(!resp || !resp.ok) return;
+      const apiData = await resp.json().catch(() => null);
+      if(!Array.isArray(apiData)) return;
+      // A szerver válasza is átmegy a fehérlistán — nem tekintjük megbízhatónak.
+      historyList = apiData
+        .slice(0, 500)
+        .map(sanitizeHistoryItem)
+        .filter(item => item && item.id);
+      historyList.sort((a,b) => new Date(b.isoDate || 0) - new Date(a.isoDate || 0));
+      saveHistory();
+      renderHistoryList();
+    } catch(err) {}
   }
 
   // ── ELŐZMÉNY-LISTA KIRAJZOLÁSA ─────────────────────────────────────
@@ -2284,14 +2367,15 @@
   function getHistoryModal(){ return $("historyModal"); }
 
   function openHistoryModal(){
-    renderHistoryList();
+    renderHistoryList();          // előbb a helyi másolat, hogy azonnal legyen tartalom
+    loadHistoryFromApi();         // majd a szerver frissíti, ha elérhető
     const modal = getHistoryModal();
     if(modal) modal.classList.add("active");
   }
 
   // ---- Indítás ------------------------------------------------------
-  // Nincs hálózati betöltés: minden adat a böngészőből jön (localStorage,
-  // IndexedDB), amit a szkript elején már beolvastunk.
+  loadHistoryFromApi();
+  loadTypesFromApi();
 
   // A Tesseract worker külön szálat és több tíz MB WASM-heapet tart életben.
   // Lapelhagyáskor elengedjük, hogy ne maradjon árva folyamat.

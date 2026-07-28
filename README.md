@@ -11,9 +11,9 @@ uj-táppénzes-igazolás-202102-minta másolata (19) másolata.psd
 Kovács János tp 2026.06.20-06.28.psd   →   D:\CsSzabj\PROHUMAN\tp\
 ```
 
-**Az alkalmazás semmilyen adatot nem küld ki a gépről.** Nincs bejelentkezés,
-nincs jelszó, nincs szerver — a dokumentumok és a személyes adatok végig helyben
-maradnak.
+**A beszkennelt dokumentum tartalma soha nem hagyja el a gépet** — az OCR és az
+előnézet is helyben fut. Az *előzmény* és az *útvonal-javaslatok* viszont egy
+közös API-ba is mentődnek, hogy több gép ugyanazt lássa.
 
 ---
 
@@ -39,7 +39,8 @@ maradnak.
 
 Nyisd meg az `index.html`-t **Chrome** vagy **Edge** böngészőben. Ennyi.
 
-Nincs telepítés, nincs `npm install`, nincs szerver, nincs jelszó.
+Nincs telepítés, nincs bejelentkezés, nincs jelszó. Az átnevezés és áthelyezés
+azonnal működik; az előzmény a közös API-val is szinkronizálódik.
 
 > A Firefox és a Safari **nem** támogatja a File System Access API-t,
 > így ott az alkalmazás nem tud fájlt mozgatni.
@@ -54,8 +55,10 @@ Nincs telepítés, nincs `npm install`, nincs szerver, nincs jelszó.
 | A megnyitott mappa gyökér-útvonala | `localStorage` | egyszer kérdezi meg |
 | Célmappa-engedélyek | `IndexedDB` | ez őrzi meg a hozzáférést újraindítás után |
 
-Mindez **böngészőnként és felhasználói profilonként külön** van. Másik gépre
-átvinni az Előzmény ablak **JSON Export** / **JSON Import** gombjaival lehet.
+A böngészőben tárolt adat **profilonként külön** van. Az előzmény és az
+útvonal-javaslatok ezen felül a közös API-ba is felkerülnek — így egy másik
+gépen ugyanazok jelennek meg. Kézi átvitelhez az Előzmény ablak
+**JSON Export** / **JSON Import** gombjai is használhatók.
 
 ### Ha törölni akarod az adatokat
 
@@ -71,27 +74,31 @@ Mindez **böngészőnként és felhasználói profilonként külön** van. Mási
 ```
 prohuman-scanner/
 │
-├── index.html          ← A TELJES ALKALMAZÁS (~2350 sor, nulla függőség)
-│   ├── <style>            CSS: rács-elrendezés, modálok, töréspontok
-│   ├── <body>             Háromhasábos felület + 2 modális ablak
-│   └── <script>           Az összes logika egyetlen IIFE-ben:
-│       ├── Konfiguráció   dokumentumtípusok, időcsoportok, kiterjesztések
-│       ├── Helyi tárolás  localStorage + IndexedDB (nincs hálózat)
-│       ├── Típus-sorok    célmappák, drag&drop sorrend, javaslat-legördülő
-│       ├── Mappa & lista  File System Access API, mtime szerinti csoportosítás
-│       ├── Előnézet       PDF/PSD/TIFF/kép renderelés, nagyítás, pásztázás
-│       ├── OCR            Tesseract worker, szöveg → űrlapmezők
-│       ├── Névépítés      tisztítás, ütközéskezelés
-│       ├── Áthelyezés     doFinish() — a fő munkafolyamat
-│       ├── Előzmény       DOM-alapú lista, JSON export/import
-│       └── IndexedDB      mappa-engedélyek megőrzése újraindítás után
+├── index.html                  ← A TELJES KLIENS (~2450 sor, nulla build-lépés)
+│   ├── <style>                    CSS: rács-elrendezés, modálok, töréspontok
+│   ├── <body>                     Háromhasábos felület + 2 modális ablak
+│   └── <script>                   Az összes logika egyetlen IIFE-ben:
+│       ├── Konfiguráció           dokumentumtípusok, időcsoportok, kiterjesztések
+│       ├── API-réteg              apiFetch — PONTOSAN egy végpont
+│       ├── Típus-sorok            célmappák, drag&drop sorrend, javaslat-legördülő
+│       ├── Mappa & fájllista      File System Access API, mtime szerinti csoportosítás
+│       ├── Előnézet               PDF/PSD/TIFF/kép renderelés, nagyítás, pásztázás
+│       ├── OCR                    Tesseract worker, szöveg → űrlapmezők
+│       ├── Névépítés              tisztítás, ütközéskezelés
+│       ├── Áthelyezés             doFinish() — a fő munkafolyamat
+│       ├── Előzmény               DOM-alapú lista, JSON export/import
+│       └── IndexedDB              mappa-engedélyek megőrzése újraindítás után
 │
-├── netlify.toml        ← Csak biztonsági fejlécek (ha Netlifyről szolgálod ki)
-├── .gitignore
-└── README.md           ← Ez a fájl
+├── backend.js                  ← Helyi API (Express, CSAK 127.0.0.1)
+├── netlify/functions/api.js    ← Éles API (Netlify Function v2 + Blobs)
+├── netlify.toml                ← Build, /api/* átirányítás, biztonsági fejlécek
+├── package.json                ← Csak a backendhez (a kliensnek nulla függősége van)
+├── package-lock.json
+├── types_api.json              ← A helyi backend adatfájlja
+│
+├── .gitignore                  ← history_api.json KI van zárva (személyes adat!)
+└── README.md                   ← Ez a fájl
 ```
-
-Ennyi. **Nincs szerverkód, nincs függőség, nincs build-lépés, nincs API.**
 
 ### Miért egyetlen `index.html`?
 
@@ -112,32 +119,35 @@ A teljes alkalmazás **egy fájl, nulla build-lépés**. Ez tudatos döntés:
 ┌────────────────────────────────────────────────────────────────┐
 │  BÖNGÉSZŐ  (Chrome / Edge)                                     │
 │                                                                │
-│  index.html                                                    │
-│      │                                                         │
 │      ├── File System Access API ──────► a felhasználó lemeze   │
-│      │      showDirectoryPicker()          olvasás + írás      │
-│      │      getDirectoryHandle()           mappa létrehozás    │
-│      │      FileSystemFileHandle.move()    átnevezés+áthelyezés│
+│      │      showDirectoryPicker() · getDirectoryHandle()       │
+│      │      FileSystemFileHandle.move()                        │
 │      │                                                         │
 │      ├── IndexedDB ("scanRenamer") ──► mappa-ENGEDÉLYEK        │
-│      │      docDir_<típus>                 tartós hozzáférés   │
-│      │      lastDir                        folytatás           │
+│      │      docDir_<típus> · lastDir                           │
 │      │                                                         │
-│      └── localStorage ────────────────► minden más adat        │
-│             docTypes · docPaths · year · rootAbsPath           │
-│             history · typesApiData                             │
-│                                                                │
-│  ✗ NINCS fetch · NINCS XHR · NINCS WebSocket · NINCS beacon    │
-└────────────────────────────────────────────────────────────────┘
-                             │
-                             │  csak KÓD letöltése (SRI-védve),
-                             ▼  adat SOHA nem megy kifelé
-              tesseract.js · pdf.js · ag-psd · UTIF
+│      ├── localStorage ────────────────► helyi másolat          │
+│      │      docTypes · docPaths · year · rootAbsPath · history │
+│      │                                                         │
+│      └── apiFetch() ──────────────────► /api/types             │
+│             PONTOSAN EGY végpont         /api/history          │
+└────────────────────────────────────────────┼───────────────────┘
+                                             │
+                  ┌──────────────────────────┴──────────────────────┐
+        ┌─────────▼──────────┐                        ┌─────────────▼────────────┐
+        │  ÉLES              │                        │  HELYI FEJLESZTÉS        │
+        │  Netlify Function  │                        │  backend.js (Express)    │
+        │        │           │                        │  csak 127.0.0.1:8788     │
+        │  Netlify Blobs     │                        │  *.json (atomi írás)     │
+        └────────────────────┘                        └──────────────────────────┘
 ```
 
-A kliensben **egyetlen kimenő adatkapcsolat sincs**. A négy CDN-hivatkozás
-kizárólag a könyvtárak kódját tölti le, és mindegyik SHA-384 integritás-hash-sel
-védett.
+**Két backend, azonos szerződéssel.** A validáló szabályaik (`normPath`,
+`isAbsPath`, mezőfehérlista, limitek) **szándékosan azonosak** — különben a
+helyben működő dolog éles környezetben elszállna.
+
+A **dokumentum tartalma** soha nem megy ki: az OCR (Tesseract WASM) és az
+előnézet (pdf.js, ag-psd, UTIF) is a böngészőben fut.
 
 ---
 
@@ -156,13 +166,24 @@ védett.
 | **localStorage** | böngésző natív | Előzmény, típusok, útvonalak, beállítások | Egyszerű kulcs-érték adatokhoz elegendő, szinkron elérésű. |
 | **Intl.Collator** | böngésző natív | Magyar ábécé szerinti, számérzékeny rendezés | `{ numeric: true }` mellett a `kép2` a `kép10` elé kerül — a naiv szövegrendezés fordítva tenné. |
 
+### Szerveroldal
+
+| Technológia | Verzió | Szerep | Miért ez |
+|---|---|---|---|
+| **Netlify Functions v2** | platform | Éles API | Szerver nélküli üzemeltetés. A v2 a szabványos `Request`/`Response` objektumokat használja, nem a régi `event`/`context` párost. |
+| **Netlify Blobs** | 10.7.10 | Perzisztens tárolás | **Ez nem stílusdöntés volt:** a Functions fájlrendszere a `/tmp`-n kívül írásvédett, és minden hívás más konténerben futhat. A korábbi `fs.writeFile()` `EROFS`-szal elszállt, a memóriában tartott adat pedig a konténerrel együtt eltűnt — ezért adott a `GET /api/types` mindig üres eredményt. A válasz `storage` mezője megmondja, hova került az adat: nem hazudik sikert némán. |
+| **Express** | 4.19.2 | Helyi API | Ismert, stabil, minimális kód. Csak a `127.0.0.1`-en figyel. |
+| **cors** | 2.8.5 | CORS-fejlécek allowlisttel | Kézi fejléckezelés helyett bevált megoldás, preflight-kezeléssel. |
+
 ### Ami tudatosan **nincs**
 
 - **Nincs build-lépés** — se webpack, se Vite, se TypeScript-fordítás.
 - **Nincs kliensoldali keretrendszer** — se React, se Vue. A dinamikus rész
   (típus-sorok, előzmény) sima DOM API-val épül.
-- **Nincs adatbázis** — a böngésző tárolói elegendők.
+- **Nincs adatbázis** — a Netlify Blobs, illetve JSON-fájlok elegendők ehhez a mérethez.
 - **Nincs telemetria, nincs analitika, nincs hibajelentő szolgáltatás.**
+- **Nincs `serverless-http`** — a v2-es függvény nem használja (felesleges
+  függőség = felesleges támadási felület).
 
 ---
 
@@ -310,17 +331,41 @@ Két esetet külön kell kezelni, különben a normalizálás elrontja őket:
 
 ## 8. Biztonsági modell
 
-### A legfontosabb: nincs kimenő adatkapcsolat
+### ⚠️ Az API nyilvános és nem kér hitelesítést
 
-A kliensben **nulla** `fetch`, `XMLHttpRequest`, `sendBeacon`, `WebSocket` és
-`EventSource` hívás van. Ez ellenőrizhető:
+Ez tudatos, üzemeltetői döntés — a napi használatot nem akadályozza jelszó.
+Amit viszont **tudni kell**, mert a következménye valós:
 
-```bash
-grep -c "fetch(\|XMLHttpRequest\|sendBeacon\|WebSocket" index.html   # → 0
+```console
+$ curl https://proscanner.netlify.app/api/history
+[{ "personName": "...", "type": "tp", "targetPath": "D:\...\tp" }, ...]
 ```
 
-Ez a legerősebb garancia, ami egy ilyen alkalmazásban adható: nem a
-hozzáférést szabályozzuk, hanem **nincs mit szabályozni**.
+Aki ismeri a végpont címét, **hitelesítés nélkül elolvashatja az előzményt** —
+benne a személynevekkel, a dokumentumtípussal és a belső mappaszerkezettel.
+A `tp` (táppénz) egészségügyi adat, amit a GDPR 9. cikke **különleges
+kategóriaként** kezel.
+
+**Ha ez nem vállalható, három út van:**
+
+| Megoldás | Mit kell tenni | Hatás |
+|---|---|---|
+| Ne menjen ki személynév | A `doFinish`-ben ne kerüljön `personName` az `addHistoryEntry` hívásba | Az útvonal-szinkron megmarad, a név nem megy ki |
+| Csak helyi működés | Az `apiFetch` hívások eltávolítása; marad a JSON Export/Import | Semmi nem hagyja el a gépet |
+| Hitelesítés | Megosztott kulcs vagy SSO a végpontokon | Napi használatnál plusz lépés |
+
+A projekt korábbi verziójában ez **ellenőrzött incidens** volt: valódi
+személy táppénz-adata volt publikusan olvasható. A rekordot töröltük, de a
+végpont továbbra is nyitott.
+
+### A dokumentum tartalma soha nem megy ki
+
+Az OCR (Tesseract WASM), a PDF/PSD/TIFF renderelés és az előnézet **teljes
+egészében a böngészőben** fut. A beszkennelt kép nem kerül fel semmilyen
+szerverre — HR-dokumentumoknál ez alapkövetelmény.
+
+Csak strukturált **metaadat** megy az API-ba: fájlnevek, személynév, típus,
+érvényesség, célmappa.
 
 ### Tárolt XSS lezárása
 
@@ -363,6 +408,40 @@ Egy fájlrendszer-jogosultságú oldalon ez nem apróság: egyetlen kompromittá
 CDN-csomag teljes lemez-hozzáférést jelentene. Az `integrity` miatt a böngésző
 eldobja a szkriptet, ha akár egyetlen bájt is más.
 
+### A szerveroldal megerősítései
+
+Hitelesítés nincs, de minden más védelem a helyén van:
+
+- **A kliens `id`-jét eldobjuk**, a szerver generál sajátot — ez vágta el a
+  tárolt XSS forrását.
+- **Bemenet-fehérlista**: csak az ismert mezők maradnak meg, szövegre
+  kényszerítve, hosszkorláttal, vezérlőkarakterek nélkül.
+- **Mennyiségi limitek**: 500 előzmény, 200 típus, 50 útvonal/típus,
+  128 kB kérés-törzs.
+- **Csak abszolút útvonal tárolható** — a puszta mappanév használhatatlan.
+- **CORS allowlist**, nem `*`.
+- **A helyi backend csak a `127.0.0.1`-en figyel.** Korábban minden hálózati
+  interfészen, nyitott CORS mellett — vagyis a céges wifin bárki lekérhette a
+  teljes előzményt.
+- **Atomi fájlírás** (ideiglenes fájl + `rename`) és **soros végrehajtás**
+  (`withLock`): két párhuzamos kérés nem írja felül egymást, és egy megszakadt
+  írás sem hagy csonka JSON-t.
+- **Nincs stack trace a hibaválaszokban.** A kliens hibája `400`/`413`,
+  a szerveré általános `500`.
+
+Ellenőrizve, 25 párhuzamos íráson: **25/25 bejegyzés megmaradt**.
+
+### Forrásfájlok elzárása
+
+A `publish = "."` a repó gyökerét tenné közzé, ezért a `netlify.toml`
+`force = true` átirányításai `404`-re állítják a `backend.js`,
+`package.json`, `types_api.json` és `netlify/*` útvonalakat.
+
+> **A GitHub Pages ezt nem tudja.** Ha a repót onnan is kiszolgálod, ott
+> minden fájl letölthető. Ezért van a `history_api.json` a `.gitignore`-ban:
+> személyes adatot tartalmazna, és verziókövetésbe kerülve visszavonhatatlanul
+> bekerülne a git-történetbe.
+
 ### HTTP biztonsági fejlécek (`netlify.toml`)
 
 Csak akkor érvényesek, ha az oldalt a Netlifyről szolgálják ki — `file://`
@@ -376,8 +455,8 @@ megnyitásnál nincs HTTP-válasz, tehát CSP sincs.
 | `Referrer-Policy: no-referrer` | Fájlnevek/útvonalak ne szivárogjanak |
 | `Permissions-Policy` | Kamera, mikrofon, helyadat kikapcsolva |
 
-A publikált mappában mindössze az `index.html`, a `netlify.toml` és ez a
-README van — nincs szerverkód, adatfájl vagy függőség, amit el kellene zárni.
+Az `/api/*` válaszokra külön `Cache-Control: no-store` szabály vonatkozik —
+személyes adat soha ne kerüljön köztes gyorsítótárba.
 
 ---
 
@@ -387,52 +466,70 @@ README van — nincs szerverkód, adatfájl vagy függőség, amit el kellene z�
 
 | Adat | Hol | Hova jut |
 |---|---|---|
-| **Személynév** | űrlap, fájlnév, előzmény | **csak a böngészőben** |
-| **Dokumentumtípus** | előzmény | csak a böngészőben |
-| **Érvényességi időszak** | előzmény | csak a böngészőben |
-| **Fájlnevek** | előzmény | csak a böngészőben |
-| **Lemezes útvonalak** | javaslatok | csak a böngészőben |
+| **Személynév** | űrlap, fájlnév, előzmény | localStorage **+ a közös API** |
+| **Dokumentumtípus** | előzmény | ugyanoda |
+| **Érvényességi időszak** | előzmény | ugyanoda |
+| **Fájlnevek** | előzmény | ugyanoda |
+| **Lemezes útvonalak** | javaslatok | ugyanoda |
 | **A dokumentum tartalma** | csak a memóriában | **sehova** — sem az OCR, sem az előnézet nem tölt fel semmit |
 
 ### Amit tudni kell
 
 - A `tp` (táppénz) típus **egészségügyi adat** → GDPR 9. cikk, különleges
   kategória, szigorúbb szabályokkal.
-- **Az adat nem hagyja el a gépet.** Nincs adatfeldolgozó, nincs felhő, nincs
-  külső szolgáltató — így adatfeldolgozói szerződés sem szükséges.
+- **A metaadat külső adatfeldolgozóhoz kerül** (Netlify Blobs). Ehhez
+  adatfeldolgozói szerződés (DPA) és az adatkezelési nyilvántartásban való
+  feltüntetés szükséges.
+- **A végpont hitelesítés nélkül olvasható** — lásd
+  [8. Biztonsági modell](#8-biztonsági-modell). Ez a legfontosabb nyitott
+  kockázat; a mérlegelés az adatkezelő felelőssége.
 - **Az előzményt bárki elolvashatja, aki a géphez hozzáfér.** A `localStorage`
-  nincs titkosítva. Ha ez kockázat, a munkaállomást kell védeni
-  (képernyőzár, külön Windows-felhasználó), nem az alkalmazást.
+  nincs titkosítva.
 - A `history_api.json` `.gitignore`-ban van, mert a helyi backend személyes
   adatot írna bele. Verziókövetésbe kerülve visszavonhatatlanul bekerülne a
   git-történetbe.
 
-> A fájl jelenleg még **követve van** a gitben (üres tartalommal). Ha ki
-> akarod venni a követésből — a lemezen meghagyva —:
-> ```bash
-> git rm --cached history_api.json
-> ```
 
 ---
 
 ## 10. Tesztelés és ellenőrzés
 
-### Az alapállítás ellenőrzése: nem megy ki adat
+### Szintaxis-ellenőrzés
 
 ```bash
-# Mindegyiknek 0-t kell adnia
-grep -c "fetch(" index.html
-grep -c "XMLHttpRequest" index.html
-grep -c "sendBeacon" index.html
-grep -c "WebSocket" index.html
-
-# A HTML-ben csak a 4 SRI-védett könyvtár lehet külső hivatkozás
-grep -o 'src="https\?://[^"]*"' index.html
+npm run check      # backend.js + netlify/functions/api.js
 ```
 
-Futásidőben: `F12` → **Network** fül → dolgozz végig néhány fájlt.
-A CDN-ek betöltésén (és az OCR nyelvi modelljén) kívül **nem szabad**
-kimenő kérésnek megjelennie.
+### A szerveroldali védelmek ellenőrzése
+
+Indítsd a backendet (`npm start`), majd:
+
+```bash
+B=http://127.0.0.1:8788
+
+# A kliens által küldött id-t el kell dobni (ez volt a tárolt XSS forrása)
+curl -s -X POST -H 'Content-Type: application/json'      -d '{"id":"<img src=x onerror=alert(1)>","personName":"Teszt"}' $B/api/history
+# Az item.id-nek szerver által generált hist_<idő>_<hex> értéknek kell lennie
+
+# Ismeretlen mezőt el kell dobni
+curl -s -X POST -H 'Content-Type: application/json'      -d '{"gonoszMezo":"x","personName":"Teszt"}' $B/api/history
+
+# Csak abszolút útvonal tárolható
+curl -s -X POST -H 'Content-Type: application/json'      -d '{"pathSuggestions":{"x":["tp","D:\\A\\B"]}}' $B/api/types
+# added: ["D:\A\B"]   rejected: ["tp"]
+
+# Hibás JSON → 400, stack trace nélkül
+curl -s -o /dev/null -w '%{http_code}
+' -X POST      -H 'Content-Type: application/json' -d '{ rossz' $B/api/history
+```
+
+### A CDN-ek sértetlensége
+
+```bash
+grep -c 'integrity="sha384-' index.html     # → 4
+grep -cE '<[^>]*onclick=' index.html        # → 0  (nincs inline kezelő)
+grep -c 'window.[a-zA-Z]* *=' index.html   # → 0  (nincs globális)
+```
 
 ### Kézi teszt-forgatókönyvek
 

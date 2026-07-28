@@ -1,22 +1,86 @@
-# A projekt tisztán statikus: egyetlen index.html, szerverkód nélkül.
-# Nincs függvény, nincs API-végpont, nincs build-lépés.
 [build]
+  functions = "netlify/functions"
   publish = "."
+
+# ── /api/* → serverless függvény ────────────────────────────────────────
+[[redirects]]
+  from = "/api/*"
+  to = "/.netlify/functions/api/:splat"
+  status = 200
+
+# ── FORRÁSFÁJLOK ELZÁRÁSA ───────────────────────────────────────────────
+#
+# A `publish = "."` a repó GYÖKERÉT teszi közzé, tehát alapból MINDEN fájl
+# letölthető volt a nyílt internetről. Ellenőrizve, mind HTTP 200-at adott:
+#     /backend.js        → a teljes szerverkód
+#     /package.json      → a függőségek pontos verziói (támadási felület)
+#     /types_api.json    → belső mappaszerkezet
+#     /history_api.json  → a helyi backend előzményfájlja (SZEMÉLYES ADAT!)
+#
+# A `force = true` azt jelenti, hogy a szabály a létező statikus fájlt is
+# felülbírálja, így ezek többé nem szolgálhatók ki.
+[[redirects]]
+  from = "/backend.js"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/package.json"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/package-lock.json"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/history_api.json"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/types_api.json"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/README.md"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/netlify/*"
+  to = "/index.html"
+  status = 404
+  force = true
+
+[[redirects]]
+  from = "/node_modules/*"
+  to = "/index.html"
+  status = 404
+  force = true
 
 # ── BIZTONSÁGI FEJLÉCEK ─────────────────────────────────────────────────
 #
 # FIGYELEM: ezek CSAK a Netlifyről kiszolgált oldalra vonatkoznak. Ha az
 # index.html-t közvetlenül, `file://` protokollal nyitod meg, a böngésző nem
-# kap HTTP-fejlécet, tehát a CSP sem érvényesül.
+# kap HTTP-fejlécet, tehát a CSP sem érvényesül. Éles használatra ezért a
+# Netlifyről kiszolgált változat az ajánlott.
 [[headers]]
   for = "/*"
   [headers.values]
-    # A CSP a betölthető erőforrások fehérlistája.
-    #  · script-src : csak a négy, SRI-vel védett könyvtár tölthető be
-    #  · connect-src: ez akadályozza meg, hogy egy esetleg injektált kód
-    #                 adatot küldjön ki egy támadó címére
-    #  · 'wasm-unsafe-eval' a Tesseract OCR WASM-motorjához kell
-    #  · blob: a pdf.js és a Tesseract worker-szálaihoz kell
+    # A CSP a betölthető erőforrások fehérlistája. A `script-src` felsorolása
+    # miatt egy esetleges kódinjektálás sem tud tetszőleges idegen szerverről
+    # kódot húzni, a `connect-src` pedig megakadályozza az adat kiszivárogtatását
+    # egy támadó címére. A 'wasm-unsafe-eval' a Tesseract OCR WASM-motorjához,
+    # a blob: a pdf.js és a Tesseract worker-szálaihoz kell.
     Content-Security-Policy = "default-src 'self'; script-src 'self' 'unsafe-inline' 'wasm-unsafe-eval' blob: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com; worker-src 'self' blob:; child-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self' blob: data: https://cdn.jsdelivr.net https://cdnjs.cloudflare.com https://tessdata.projectnaptha.com; font-src 'self'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'"
     # Az oldal nem ágyazható be iframe-be (clickjacking ellen).
     X-Frame-Options = "DENY"
@@ -26,3 +90,9 @@
     Referrer-Policy = "no-referrer"
     # Nem használt, érzékeny böngésző-API-k kikapcsolása.
     Permissions-Policy = "camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()"
+
+# Az API-válaszok soha ne kerüljenek gyorsítótárba (személyes adat).
+[[headers]]
+  for = "/api/*"
+  [headers.values]
+    Cache-Control = "no-store, max-age=0"
