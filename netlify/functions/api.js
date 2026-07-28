@@ -123,7 +123,7 @@ app.post("/api/types", async (req, resp) => {
         const newPaths = pathSuggestions[t];
         if (Array.isArray(newPaths)) {
           newPaths.forEach(p => {
-            if (p && p.trim() && (p.includes("\\") || p.includes("/") || p.includes(":")) && !memoryTypes.pathSuggestions[t].includes(p.trim())) {
+            if (p && p.trim() && p.trim().length > 1 && !memoryTypes.pathSuggestions[t].includes(p.trim())) {
               memoryTypes.pathSuggestions[t].push(p.trim());
             }
           });

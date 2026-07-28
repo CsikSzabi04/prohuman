@@ -481,11 +481,11 @@
     if(!t || !pathVal) return;
     const cleanPath = pathVal.trim();
     if(cleanPath.length <= 1) return;
-    if(!cleanPath.includes("\\") && !cleanPath.includes("/") && !cleanPath.includes(":")) return;
 
     if(!typesApiData) typesApiData = { docTypes: [], pathSuggestions: {} };
     if(!typesApiData.pathSuggestions) typesApiData.pathSuggestions = {};
     if(!typesApiData.pathSuggestions[t]) typesApiData.pathSuggestions[t] = [];
+
     if(!typesApiData.pathSuggestions[t].includes(cleanPath)){
       typesApiData.pathSuggestions[t].push(cleanPath);
       try {
@@ -503,7 +503,9 @@
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
         });
-      } catch(_) {}
+      } catch(err) {
+        console.error("Hiba az API mentés során:", err);
+      }
     }
   }
 
@@ -933,27 +935,15 @@
         setTimeout(() => {
           handleInput();
           renderDropdown();
-          const val = input.value.trim();
-          if(val && val.length > 2){
-            savePathSuggestionForType(t, val);
-          }
-        }, 50);
+        }, 10);
       };
       input.onblur = () => {
-        const val = input.value.trim();
-        if(val && val.length > 2){
-          savePathSuggestionForType(t, val);
-        }
         setTimeout(() => dropdown.classList.remove("active"), 200);
       };
       input.onkeydown = (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
           handleInput();
-          const val = input.value.trim();
-          if(val && val.length > 2){
-            savePathSuggestionForType(t, val);
-          }
           dropdown.classList.remove("active");
           if (!el.rename.disabled) doFinish();
         } else if (e.key === "Escape") {
