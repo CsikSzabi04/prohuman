@@ -1609,6 +1609,34 @@
     } catch(_) {}
   }
 
+  async function loadHistoryFromApi(){
+    try {
+      const resp = await fetch('./history_api.json?v=' + Date.now());
+      if(resp.ok){
+        const apiData = await resp.json();
+        if(Array.isArray(apiData) && apiData.length > 0){
+          const existingKeys = new Set(historyList.map(item => item.id || (item.origName + "_" + item.newName)));
+          let hasNew = false;
+          apiData.forEach(item => {
+            const key = item.id || (item.origName + "_" + item.newName);
+            if(!existingKeys.has(key)){
+              historyList.push(item);
+              existingKeys.add(key);
+              hasNew = true;
+            }
+          });
+          if(hasNew || historyList.length === 0){
+            historyList.sort((a,b) => new Date(b.isoDate || 0) - new Date(a.isoDate || 0));
+            saveHistory();
+            renderHistoryList();
+          }
+        }
+      }
+    } catch(err) {
+      console.log("History API fetch info:", err);
+    }
+  }
+
   function addHistoryEntry(entry){
     const now = new Date();
     historyList.unshift({
@@ -1774,9 +1802,13 @@
 
   function openHistoryModal(){
     renderHistoryList();
+    loadHistoryFromApi();
     const modal = getHistoryModal();
     if(modal) modal.classList.add("active");
   }
+
+  // Automatikus API betöltés az indításkor
+  loadHistoryFromApi();
 
   function closeHistoryModal(){
     const modal = getHistoryModal();

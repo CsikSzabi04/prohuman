@@ -1,0 +1,28 @@
+[
+  {
+    "id": "hist_1785233400000_demo1",
+    "origName": "SCAN_20260728_001.pdf",
+    "newName": "Kovacs_Janos_munkaba_jaras_2026.07.20-07.21_2026.pdf",
+    "personName": "Kovács János",
+    "type": "munkába járás",
+    "validity": "2026.07.20-07.21",
+    "year": "2026",
+    "targetPath": "munkába járás",
+    "isoDate": "2026-07-28T10:15:00.000Z",
+    "date": "2026. 07. 28.",
+    "time": "10:15:00"
+  },
+  {
+    "id": "hist_1785233500000_demo2",
+    "origName": "DOC_20260728_002.pdf",
+    "newName": "Nagy_Anna_szerzodes_csomag_2026.pdf",
+    "personName": "Nagy Anna",
+    "type": "szerződés csomag",
+    "validity": "",
+    "year": "2026",
+    "targetPath": "szerződés csomag",
+    "isoDate": "2026-07-28T10:30:00.000Z",
+    "date": "2026. 07. 28.",
+    "time": "10:30:00"
+  }
+]
