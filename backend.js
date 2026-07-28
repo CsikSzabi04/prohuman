@@ -25,6 +25,17 @@ async function writeJsonFile(filePath, data) {
   await fs.writeFile(filePath, JSON.stringify(data, null, 2), "utf-8");
 }
 
+/** Útvonal-normalizálás: mindig `\` elválasztó, záró `\` nélkül. */
+function normPath(p) {
+  return String(p == null ? "" : p).trim().replace(/[/]+/g, "\\").replace(/\\+$/, "");
+}
+
+/** Teljes útvonal-e? `D:\...`, `\\szerver\...` vagy `/home/...` */
+function isAbsPath(p) {
+  const s = String(p == null ? "" : p).trim();
+  return /^[a-zA-Z]:[\\/]/.test(s) || /^\\\\/.test(s) || /^\//.test(s);
+}
+
 // ---- ELŐZMÉNYEK API (HISTORY) -----------------------------------
 
 // 1. Összes előzmény lekérése
@@ -105,15 +116,22 @@ async function postTypes(req, resp) {
       currentData.docTypes = docTypes;
     }
 
+    // A Netlify-függvénnyel AZONOS szabály: csak TELJES útvonalat tárolunk
+    // (pl. D:\CsSzabj\PROHUMAN\összevont adóelőleg) — a puszta mappanév ("tp")
+    // javaslatként használhatatlan. Így a lokális és az éles API nem tér el.
+    const added = [], rejected = [];
     if (pathSuggestions && typeof pathSuggestions === "object") {
       currentData.pathSuggestions = currentData.pathSuggestions || {};
       Object.keys(pathSuggestions).forEach(t => {
         if (!currentData.pathSuggestions[t]) currentData.pathSuggestions[t] = [];
         const newPaths = pathSuggestions[t];
         if (Array.isArray(newPaths)) {
-          newPaths.forEach(p => {
+          newPaths.forEach(raw => {
+            const p = normPath(raw);
+            if (!p || p.length < 3 || !isAbsPath(p)) { rejected.push(raw); return; }
             if (!currentData.pathSuggestions[t].includes(p)) {
               currentData.pathSuggestions[t].push(p);
+              added.push(p);
             }
           });
         }
@@ -121,7 +139,7 @@ async function postTypes(req, resp) {
     }
 
     await writeJsonFile(TYPES_FILE, currentData);
-    resp.send({ success: true, data: currentData });
+    resp.send({ success: true, storage: "file", added, rejected, ...currentData });
   } catch (err) {
     resp.status(400).send({ error: err.message });
   }

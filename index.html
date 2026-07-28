@@ -465,47 +465,112 @@
     urls.push('https://proscanner.netlify.app' + endpoint);
     urls.push('http://localhost:88' + endpoint);
 
-    let lastErr = null;
+    // FONTOS: csak a 2xx számít sikernek. Korábban a `status < 500` miatt egy
+    // same-origin 404 (pl. statikus szerverről nyitva, ahol nincs függvény) LEZÁRTA
+    // a láncot → a netlify.app-ot meg sem próbálta, és úgy tűnt, "nem ment el".
+    let lastErr = null, lastRes = null;
     for (const url of urls) {
       try {
         const res = await fetch(url, options);
-        if (res && (res.ok || res.status < 500)) return res;
+        if (res && res.ok) return res;
+        if (res) lastRes = res;
       } catch (err) {
         lastErr = err;
       }
     }
+    if (lastRes) return lastRes;
     throw lastErr || new Error("API Nem érhető el");
   }
 
+  // ── ABSZOLÚT ÚTVONAL ────────────────────────────────────────────────
+  // A böngésző (File System Access API) BIZTONSÁGI OKBÓL nem adja meg a mappa
+  // abszolút útvonalát – csak a NEVÉT ("tp"). Ezért a gyökér teljes útvonalát
+  // EGYSZER megkérdezzük, és onnantól a dirHandle.resolve() segítségével MINDEN
+  // célmappára ki tudjuk számolni:  D:\CsSzabj\PROHUMAN  +  \összevont adóelőleg
+  let rootAbsPath = "";
+  try { rootAbsPath = localStorage.getItem("scanRenamer_rootAbsPath") || ""; } catch(_){}
+
+  function normAbs(p){
+    return String(p == null ? "" : p).trim().replace(/[\\/]+/g, "\\").replace(/\\+$/, "");
+  }
+  function isAbsPath(p){
+    const s = String(p == null ? "" : p).trim();
+    return /^[a-zA-Z]:[\\/]/.test(s) || /^\\\\/.test(s) || /^\//.test(s);
+  }
+  function saveRootAbsPath(v){
+    rootAbsPath = normAbs(v);
+    try { localStorage.setItem("scanRenamer_rootAbsPath", rootAbsPath); } catch(_){}
+  }
+  function askRootAbsPath(force){
+    if(!dirHandle) return "";
+    const name = dirHandle.name || "";
+    const already = rootAbsPath && normAbs(rootAbsPath).toLowerCase().endsWith("\\" + name.toLowerCase());
+    if(already && !force) return rootAbsPath;
+    const ans = window.prompt(
+      "Add meg a MEGNYITOTT mappa teljes útvonalát.\n" +
+      "(A böngésző biztonsági okból nem tudja kiolvasni, enélkül viszont nem tudjuk\n" +
+      "az API-ba menteni a valódi célútvonalakat.)\n\n" +
+      "Példa:  D:\\CsSzabj\\PROHUMAN\n\nA megnyitott mappa neve: " + name,
+      rootAbsPath || "D:\\CsSzabj\\PROHUMAN"
+    );
+    if(ans && isAbsPath(ans)) saveRootAbsPath(ans);
+    return rootAbsPath;
+  }
+
+  // A célmappa TELJES útvonala. Sorrend:
+  //   1) ha a beírt érték már abszolút → azt használjuk
+  //   2) gyökér-útvonal + a dirHandle.resolve() relatív szegmensei
+  //   3) végső esetben rákérdezünk (előre kitöltött tippel)
+  async function absPathForTarget(targetDirHandle, pathVal, typeVal){
+    if(isAbsPath(pathVal)) return normAbs(pathVal);
+
+    if(rootAbsPath && dirHandle && typeof dirHandle.resolve === "function" && targetDirHandle){
+      try{
+        const rel = await dirHandle.resolve(targetDirHandle);
+        if(Array.isArray(rel)){
+          return rel.length ? normAbs(normAbs(rootAbsPath) + "\\" + rel.join("\\")) : normAbs(rootAbsPath);
+        }
+      }catch(_){}
+    }
+
+    const folder = (targetDirHandle && targetDirHandle.name) || normAbs(pathVal) || typeVal || "";
+    const guess = (rootAbsPath ? normAbs(rootAbsPath) : "D:\\CsSzabj\\PROHUMAN") + "\\" + folder;
+    const ans = window.prompt(
+      "Mi a(z) '" + (typeVal || folder) + "' célmappa TELJES útvonala?\n" +
+      "(Ezt égetjük be az API-ba, hogy legközelebb fel tudjuk kínálni.)",
+      guess
+    );
+    if(ans && isAbsPath(ans)) return normAbs(ans);
+    return normAbs(pathVal) || folder;
+  }
+
+  // Az API-mentés MOSTANTÓL MINDIG lefut (a szerver-oldali összefésülés idempotens).
+  // Korábban a „csak ha még nincs a lokális listában” feltétel miatt egy sikertelen
+  // mentés SOHA nem próbálkozott újra → az útvonal örökre elveszett.
+  // Visszatérés: true = a szerver VISSZAIGAZOLTA, hogy eltárolta.
   async function savePathSuggestionForType(t, pathVal){
-    if(!t || !pathVal) return;
-    const cleanPath = pathVal.trim();
-    if(cleanPath.length <= 1) return;
+    const cleanPath = normAbs(pathVal);
+    if(!t || !cleanPath || cleanPath.length <= 2) return false;
 
     if(!typesApiData) typesApiData = { docTypes: [], pathSuggestions: {} };
     if(!typesApiData.pathSuggestions) typesApiData.pathSuggestions = {};
     if(!typesApiData.pathSuggestions[t]) typesApiData.pathSuggestions[t] = [];
+    if(!typesApiData.pathSuggestions[t].includes(cleanPath)) typesApiData.pathSuggestions[t].push(cleanPath);
+    try { localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData)); } catch(_){}
 
-    if(!typesApiData.pathSuggestions[t].includes(cleanPath)){
-      typesApiData.pathSuggestions[t].push(cleanPath);
-      try {
-        localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData));
-      } catch(_) {}
-
-      const payload = {
-        docTypes: docTypes,
-        pathSuggestions: typesApiData.pathSuggestions
-      };
-
-      try {
-        await apiFetch('/api/types', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(payload)
-        });
-      } catch(err) {
-        console.error("Hiba az API mentés során:", err);
-      }
+    try{
+      const res = await apiFetch('/api/types', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ docTypes: docTypes, pathSuggestions: { [t]: [cleanPath] } })
+      });
+      if(!res || !res.ok) return false;
+      const data = await res.json().catch(() => null);
+      return !!(data && data.pathSuggestions && Array.isArray(data.pathSuggestions[t])
+        && data.pathSuggestions[t].includes(cleanPath));
+    }catch(err){
+      console.error("Hiba az API mentés során:", err);
+      return false;
     }
   }
 
@@ -1087,9 +1152,8 @@
       const perm = await dirHandle.requestPermission({ mode:"readwrite" });
       if(perm!=="granted"){ banner("Nincs írási engedély a mappához – az áthelyezés nem fog működni."); }
       else banner("");
-      idbSet("lastDir", dirHandle).catch(()=>{});
-      hideRestoreButton();
-      await listFiles();
+      $1$2askRootAbsPath(false);
+$2$3
     }catch(err){
       if(err && err.name==="AbortError") return;
       banner("Nem sikerült megnyitni a mappát: "+(err&&err.message||err));
@@ -1525,9 +1589,19 @@
       f.name = targetFileName;
       markDone();
 
-      const finalPath = pathVal || targetDirHandle.name;
+      // A fájl EKKOR MÁR átkerült az új néven a célmappába (a move/copy+delete
+      // lefutott, hiba nélkül) → MOST, és CSAK most égetjük be az API-ba a
+      // célmappa TELJES útvonalát, pl.  D:\CsSzabj\PROHUMAN\összevont adóelőleg
+      let finalPath = await absPathForTarget(targetDirHandle, pathVal, typeVal);
+      if(!finalPath) finalPath = pathVal || targetDirHandle.name;
+
+      let apiSaved = false;
       if(typeVal && finalPath){
-        await savePathSuggestionForType(typeVal, finalPath);
+        const pinp = $("path-input-" + slugify(typeVal));
+        if(pinp && normAbs(pinp.value) !== normAbs(finalPath)) pinp.value = finalPath;
+        docPaths[typeVal] = finalPath;
+        saveDocPaths();
+        apiSaved = await savePathSuggestionForType(typeVal, finalPath);
       }
 
       addHistoryEntry({
@@ -1540,7 +1614,11 @@
         targetPath: finalPath
       });
 
-      setStatus("Sikeresen áthelyezve: " + targetFileName + " ➔ " + pathVal, "ok");
+      setStatus(
+        "Sikeresen áthelyezve: " + targetFileName + " ➔ " + finalPath +
+        (typeVal ? (apiSaved ? "  ·  útvonal elmentve az API-ba ✓" : "  ·  ⚠ az API-mentés NEM sikerült") : ""),
+        (!typeVal || apiSaved) ? "ok" : "warn"
+      );
       goNext();
     }catch(err){
       setStatus("Hiba az áthelyezés során: "+(err&&err.message||err),"err");
@@ -1584,11 +1662,13 @@
         const perm = await handle.requestPermission({ mode:"readwrite" });
         if(perm === "granted"){
           await idbSet("docDir_" + typeVal, handle);
+          const absSel = await absPathForTarget(handle, "", typeVal);
           const inp = $("path-input-" + slugify(typeVal));
-          if(inp) inp.value = handle.name;
-          docPaths[typeVal] = handle.name;
+          if(inp) inp.value = absSel || handle.name;
+          docPaths[typeVal] = absSel || handle.name;
           saveDocPaths();
-          savePathSuggestionForType(typeVal, handle.name);
+          // FIGYELEM: itt SZÁNDÉKOSAN NINCS API-mentés — csak a tényleges,
+          // sikeres átnevezés+áthelyezés után mentünk (lásd doFinish).
           return handle;
         }
       } catch(pickErr) {

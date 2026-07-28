@@ -8,6 +8,7 @@
     "dev": "node --watch backend.js"
   },
   "dependencies": {
+    "@netlify/blobs": "^10.7.10",
     "cors": "^2.8.5",
     "express": "^4.19.2",
     "serverless-http": "^4.0.0"
