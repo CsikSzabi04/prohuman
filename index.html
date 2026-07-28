@@ -459,11 +459,14 @@
 
   async function savePathSuggestionForType(t, pathVal){
     if(!t || !pathVal) return;
+    const cleanPath = pathVal.trim();
+    if(cleanPath.length <= 1) return;
+
     if(!typesApiData) typesApiData = { docTypes: [], pathSuggestions: {} };
     if(!typesApiData.pathSuggestions) typesApiData.pathSuggestions = {};
     if(!typesApiData.pathSuggestions[t]) typesApiData.pathSuggestions[t] = [];
-    if(!typesApiData.pathSuggestions[t].includes(pathVal)){
-      typesApiData.pathSuggestions[t].push(pathVal);
+    if(!typesApiData.pathSuggestions[t].includes(cleanPath)){
+      typesApiData.pathSuggestions[t].push(cleanPath);
       try {
         localStorage.setItem("scanRenamer_typesApiData", JSON.stringify(typesApiData));
       } catch(_) {}

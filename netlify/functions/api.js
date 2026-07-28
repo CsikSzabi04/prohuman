@@ -32,15 +32,15 @@ async function writeJsonFile(filePath, data) {
   }
 }
 
-// Pre-load from disk if available
-readJsonFile(HISTORY_FILE, []).then(d => { memoryHistory = d; });
-readJsonFile(TYPES_FILE, { docTypes: [], pathSuggestions: {} }).then(d => { memoryTypes = d; });
-
 // ---- ELŐZMÉNYEK API -----------------------------------------------
 app.get("/api/history", async (req, resp) => {
   try {
-    const history = memoryHistory.length ? memoryHistory : await readJsonFile(HISTORY_FILE, []);
-    resp.json(history);
+    const historyFromFile = await readJsonFile(HISTORY_FILE, null);
+    if (historyFromFile !== null) {
+      memoryHistory = historyFromFile;
+      return resp.json(historyFromFile);
+    }
+    resp.json(memoryHistory);
   } catch (err) {
     resp.status(500).json({ error: err.message });
   }
@@ -85,10 +85,12 @@ app.delete("/api/history/:id?", async (req, resp) => {
 // ---- DOKUMENTUM TÍPUSOK & ÚTVONALAK API ---------------------------
 app.get("/api/types", async (req, resp) => {
   try {
-    const typesData = memoryTypes.docTypes && memoryTypes.docTypes.length
-      ? memoryTypes
-      : await readJsonFile(TYPES_FILE, { docTypes: [], pathSuggestions: {} });
-    resp.json(typesData);
+    const typesFromFile = await readJsonFile(TYPES_FILE, null);
+    if (typesFromFile !== null) {
+      memoryTypes = typesFromFile;
+      return resp.json(typesFromFile);
+    }
+    resp.json(memoryTypes);
   } catch (err) {
     resp.status(500).json({ error: err.message });
   }
@@ -107,8 +109,8 @@ app.post("/api/types", async (req, resp) => {
         const newPaths = pathSuggestions[t];
         if (Array.isArray(newPaths)) {
           newPaths.forEach(p => {
-            if (!memoryTypes.pathSuggestions[t].includes(p)) {
-              memoryTypes.pathSuggestions[t].push(p);
+            if (p && p.trim().length > 1 && !memoryTypes.pathSuggestions[t].includes(p.trim())) {
+              memoryTypes.pathSuggestions[t].push(p.trim());
             }
           });
         }
