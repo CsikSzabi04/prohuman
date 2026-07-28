@@ -801,11 +801,6 @@
           });
         }
 
-        if(set.size === 0){
-          set.add(`C:\\Scanner\\${slugify(t)}`);
-          set.add(`D:\\Dokumentumok\\${selectedYear}\\${slugify(t)}`);
-        }
-
         const query = input.value.trim().toLowerCase();
         return Array.from(set).filter(s => !query || s.toLowerCase().includes(query));
       };
