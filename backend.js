@@ -2,17 +2,14 @@ import express from "express";
 import cors from "cors";
 import fs from "fs/promises";
 import path from "path";
-import { fileURLToPath } from "url";
-
-const __filename = fileURLToPath(import.meta.url);
-const __dirname = path.dirname(__filename);
 
 const app = express();
 app.use(express.json());
 app.use(cors());
 
-const HISTORY_FILE = path.join(__dirname, "history_api.json");
-const TYPES_FILE = path.join(__dirname, "types_api.json");
+const workDir = process.cwd();
+const HISTORY_FILE = path.join(workDir, "history_api.json");
+const TYPES_FILE = path.join(workDir, "types_api.json");
 
 // Segédfüggvények JSON fájlok olvasásához és írásához
 async function readJsonFile(filePath, defaultData = []) {
