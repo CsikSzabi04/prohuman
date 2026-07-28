@@ -935,15 +935,27 @@
         setTimeout(() => {
           handleInput();
           renderDropdown();
-        }, 10);
+          const val = input.value.trim();
+          if(val && val.length > 2){
+            savePathSuggestionForType(t, val);
+          }
+        }, 50);
       };
       input.onblur = () => {
+        const val = input.value.trim();
+        if(val && val.length > 2){
+          savePathSuggestionForType(t, val);
+        }
         setTimeout(() => dropdown.classList.remove("active"), 200);
       };
       input.onkeydown = (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
           handleInput();
+          const val = input.value.trim();
+          if(val && val.length > 2){
+            savePathSuggestionForType(t, val);
+          }
           dropdown.classList.remove("active");
           if (!el.rename.disabled) doFinish();
         } else if (e.key === "Escape") {
