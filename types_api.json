@@ -1,0 +1,43 @@
+{
+  "docTypes": [
+    "munkába járás",
+    "tp",
+    "pótszabi",
+    "szerződés csomag",
+    "országbérlet",
+    "vármegyebérlet",
+    "adóelőleg",
+    "összevont adóelőleg"
+  ],
+  "pathSuggestions": {
+    "munkába járás": [
+      "C:\\Scanner\\MunkabaJaras",
+      "D:\\Dokumentumok\\2026\\Munkaba_jaras",
+      "E:\\Prohuman\\Munkaba_jaras"
+    ],
+    "tp": [
+      "C:\\Scanner\\TP",
+      "D:\\Dokumentumok\\2026\\TP"
+    ],
+    "pótszabi": [
+      "C:\\Scanner\\Potszabi",
+      "D:\\Dokumentumok\\2026\\Potszabi"
+    ],
+    "szerződés csomag": [
+      "C:\\Scanner\\Szerzodesek",
+      "D:\\Dokumentumok\\2026\\Szerzodes_csomag"
+    ],
+    "országbérlet": [
+      "C:\\Scanner\\Orszagberlet"
+    ],
+    "vármegyebérlet": [
+      "C:\\Scanner\\Varmegyeberlet"
+    ],
+    "adóelőleg": [
+      "C:\\Scanner\\Adoelog"
+    ],
+    "összevont adóelőleg": [
+      "C:\\Scanner\\OsszevontAdoelog"
+    ]
+  }
+}

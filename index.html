@@ -115,8 +115,14 @@
   .drag-handle:active{cursor:grabbing}
   .drag-handle:hover{background:#e2e8f0;color:var(--ink)}
   
-  .type-row .path-input{flex:1;padding:7px 10px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff}
+  .type-row .path-input{flex:1;width:100%;padding:7px 10px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff}
   .type-row.sel .path-input{border-color:#bfdbfe}
+  .path-input-wrapper{position:relative;flex:1;display:flex;align-items:center}
+  .path-dropdown{display:none;position:absolute;top:calc(100% + 4px);left:0;right:0;z-index:9999;background:#fff;border:1px solid var(--line);border-radius:8px;box-shadow:0 10px 20px -5px rgba(0,0,0,0.15);max-height:115px;overflow-y:auto;padding:4px 0}
+  .path-dropdown.active{display:block}
+  .path-dropdown-header{font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.04em;color:var(--muted);padding:4px 10px 2px;background:#f8fafc;border-bottom:1px solid #f1f5f9}
+  .path-dropdown-item{padding:7px 10px;font-size:12px;color:var(--ink);cursor:pointer;white-space:nowrap;overflow:hidden;text-overflow:ellipsis;transition:background .1s ease}
+  .path-dropdown-item:hover{background:#edf4ff;color:var(--accent-d);font-weight:600}
   .type-row .pick-dir-btn{padding:5px 8px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid var(--line);background:#f8fafc;color:var(--muted);border-radius:6px;cursor:pointer;transition:all .15s ease}
   .type-row .pick-dir-btn:hover{background:#eef2ff;color:var(--accent-d);border-color:#a5b4fc}
   .type-row .type-btn{width:140px;flex-shrink:0;text-align:center;font-size:12px;font-weight:600;padding:7px 10px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;cursor:pointer;user-select:none;transition:all .15s ease}
@@ -443,6 +449,38 @@
     } catch(_) {}
   }
 
+  let typesApiData = { docTypes: [], pathSuggestions: {} };
+
+  async function loadTypesFromApi(){
+    try {
+      const url = location.protocol === 'file:'
+        ? 'https://csikszabi04.github.io/prohuman/types_api.json'
+        : './types_api.json';
+      const resp = await fetch(url + '?v=' + Date.now());
+      if(resp.ok){
+        const data = await resp.json();
+        if(data && typeof data === 'object'){
+          typesApiData = data;
+          if(Array.isArray(data.docTypes) && data.docTypes.length > 0){
+            let hasNew = false;
+            data.docTypes.forEach(t => {
+              if(!docTypes.includes(t)){
+                docTypes.push(t);
+                hasNew = true;
+              }
+            });
+            if(hasNew){
+              saveDocTypes();
+              buildTypeRows();
+            }
+          }
+        }
+      }
+    } catch(err) {
+      // Ignore local file CORS fetch errors gracefully
+    }
+  }
+
   // ---- Elemek -------------------------------------------------------
   const $ = id => document.getElementById(id);
   const el = {
@@ -737,6 +775,9 @@
         };
       }
 
+      const inputWrapper = document.createElement("div");
+      inputWrapper.className = "path-input-wrapper";
+
       const input = document.createElement("input");
       input.type = "text";
       input.className = "path-input";
@@ -744,6 +785,55 @@
       input.placeholder = "copy the path to move";
       input.value = docPaths[t] || "";
       input.autocomplete = "off";
+
+      const dropdown = document.createElement("div");
+      dropdown.className = "path-dropdown";
+
+      const getSuggestions = () => {
+        const set = new Set();
+        if(docPaths[t]) set.add(docPaths[t]);
+
+        const apiSugg = (typesApiData.pathSuggestions && typesApiData.pathSuggestions[t]) || [];
+        apiSugg.forEach(s => { if(s) set.add(s); });
+
+        if(typeof historyList !== 'undefined' && Array.isArray(historyList)){
+          historyList.forEach(item => {
+            if(item.type === t && item.targetPath) set.add(item.targetPath);
+          });
+        }
+
+        if(set.size === 0){
+          set.add(`C:\\Scanner\\${slugify(t)}`);
+          set.add(`D:\\Dokumentumok\\${selectedYear}\\${slugify(t)}`);
+        }
+
+        const query = input.value.trim().toLowerCase();
+        return Array.from(set).filter(s => !query || s.toLowerCase().includes(query));
+      };
+
+      const renderDropdown = () => {
+        const list = getSuggestions();
+        if(list.length === 0){
+          dropdown.classList.remove("active");
+          dropdown.innerHTML = "";
+          return;
+        }
+        dropdown.innerHTML = `<div class="path-dropdown-header">Korábbi & Ajánlott útvonalak</div>`;
+        list.forEach(pathStr => {
+          const itemDiv = document.createElement("div");
+          itemDiv.className = "path-dropdown-item";
+          itemDiv.textContent = pathStr;
+          itemDiv.title = pathStr;
+          itemDiv.onmousedown = (e) => {
+            e.preventDefault();
+            input.value = pathStr;
+            handleInput();
+            dropdown.classList.remove("active");
+          };
+          dropdown.appendChild(itemDiv);
+        });
+        dropdown.classList.add("active");
+      };
 
       const pickBtn = document.createElement("button");
       pickBtn.type = "button";
@@ -771,7 +861,6 @@
       };
 
       btn.onclick = selectThisType;
-      input.onfocus = selectThisType;
       const handleInput = () => {
         docPaths[t] = input.value.trim();
         saveDocPaths();
@@ -783,17 +872,39 @@
         clearValidationErrors();
         updatePreview();
       };
-      input.oninput = handleInput;
-      input.onpaste = () => setTimeout(handleInput, 10);
+
+      input.onfocus = () => {
+        selectThisType();
+        renderDropdown();
+      };
+      input.oninput = () => {
+        handleInput();
+        renderDropdown();
+      };
+      input.onpaste = () => {
+        setTimeout(() => {
+          handleInput();
+          renderDropdown();
+        }, 10);
+      };
+      input.onblur = () => {
+        setTimeout(() => dropdown.classList.remove("active"), 200);
+      };
       input.onkeydown = (e) => {
         if (e.key === "Enter") {
           e.preventDefault();
           handleInput();
+          dropdown.classList.remove("active");
           if (!el.rename.disabled) doFinish();
+        } else if (e.key === "Escape") {
+          dropdown.classList.remove("active");
         }
       };
 
-      row.appendChild(input);
+      inputWrapper.appendChild(input);
+      inputWrapper.appendChild(dropdown);
+
+      row.appendChild(inputWrapper);
       row.appendChild(pickBtn);
       row.appendChild(btn);
 
@@ -1611,7 +1722,10 @@
 
   async function loadHistoryFromApi(){
     try {
-      const resp = await fetch('./history_api.json?v=' + Date.now());
+      const url = location.protocol === 'file:'
+        ? 'https://csikszabi04.github.io/prohuman/history_api.json'
+        : './history_api.json';
+      const resp = await fetch(url + '?v=' + Date.now());
       if(resp.ok){
         const apiData = await resp.json();
         if(Array.isArray(apiData) && apiData.length > 0){
@@ -1633,7 +1747,7 @@
         }
       }
     } catch(err) {
-      console.log("History API fetch info:", err);
+      // Ignore local file CORS fetch errors gracefully
     }
   }
 
@@ -1809,6 +1923,7 @@
 
   // Automatikus API betöltés az indításkor
   loadHistoryFromApi();
+  loadTypesFromApi();
 
   function closeHistoryModal(){
     const modal = getHistoryModal();
