@@ -481,6 +481,7 @@
     if(!t || !pathVal) return;
     const cleanPath = pathVal.trim();
     if(cleanPath.length <= 1) return;
+    if(!cleanPath.includes("\\") && !cleanPath.includes("/") && !cleanPath.includes(":")) return;
 
     if(!typesApiData) typesApiData = { docTypes: [], pathSuggestions: {} };
     if(!typesApiData.pathSuggestions) typesApiData.pathSuggestions = {};
