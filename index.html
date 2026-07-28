@@ -1736,7 +1736,12 @@
   let historyList = [];
   try {
     const savedHist = localStorage.getItem("scanRenamer_history");
-    if(savedHist) historyList = JSON.parse(savedHist);
+    if(savedHist) {
+      historyList = JSON.parse(savedHist);
+      if(Array.isArray(historyList)){
+        historyList = historyList.filter(item => item.id && !item.id.includes("demo"));
+      }
+    }
   } catch(_) { historyList = []; }
 
   function saveHistory(){
