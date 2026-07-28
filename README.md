@@ -20,19 +20,18 @@ maradnak.
 ## Tartalomjegyzék
 
 1. [Gyorsindítás](#1-gyorsindítás)
-2. [⚠️ Egyszeri teendő a régi telepítés miatt](#2-️-egyszeri-teendő-a-régi-telepítés-miatt)
-3. [Fájlhierarchia](#3-fájlhierarchia)
-4. [Architektúra](#4-architektúra)
-5. [Technológiák — mit mire használunk és miért](#5-technológiák--mit-mire-használunk-és-miért)
-6. [Adatfolyam](#6-adatfolyam)
-7. [Fájlnév-szabályok](#7-fájlnév-szabályok)
-8. [Célmappa-feloldás](#8-célmappa-feloldás)
-9. [Biztonsági modell](#9-biztonsági-modell)
-10. [Adatvédelem / GDPR](#10-adatvédelem--gdpr)
-11. [Tesztelés és ellenőrzés](#11-tesztelés-és-ellenőrzés)
-12. [Hibaelhárítás](#12-hibaelhárítás)
-13. [Karbantartás](#13-karbantartás)
-14. [Ismert korlátok](#14-ismert-korlátok)
+2. [Fájlhierarchia](#2-fájlhierarchia)
+3. [Architektúra](#3-architektúra)
+4. [Technológiák — mit mire használunk és miért](#4-technológiák-mit-mire-használunk-és-miért)
+5. [Adatfolyam](#5-adatfolyam)
+6. [Fájlnév-szabályok](#6-fájlnév-szabályok)
+7. [Célmappa-feloldás](#7-célmappa-feloldás)
+8. [Biztonsági modell](#8-biztonsági-modell)
+9. [Adatvédelem / GDPR](#9-adatvédelem-gdpr)
+10. [Tesztelés és ellenőrzés](#10-tesztelés-és-ellenőrzés)
+11. [Hibaelhárítás](#11-hibaelhárítás)
+12. [Karbantartás](#12-karbantartás)
+13. [Ismert korlátok](#13-ismert-korlátok)
 
 ---
 
@@ -67,91 +66,32 @@ Mindez **böngészőnként és felhasználói profilonként külön** van. Mási
 
 ---
 
-## 2. ⚠️ Egyszeri teendő a régi telepítés miatt
-
-A mostani kliens nem használ API-t. **De a Netlifyre korábban feltöltött
-függvény még élhet, és a régi adat még benne lehet.**
-
-Ez ellenőrzött, nem elméleti probléma volt: a `GET /api/history` végpont
-hitelesítés nélkül, a nyílt internetről kiadta a teljes előzményt — benne
-valódi **személynevekkel**, dokumentumtípussal és a belső mappaszerkezettel.
-A `tp` = **táppénz**, azaz egészségügyi adat, amit a GDPR 9. cikke
-**különleges kategóriaként** kezel.
-
-> A konkrét kiszivárgott rekordot itt szándékosan nem közöljük — ez a fájl
-> nyilvános repóban van.
-
-### A lezárás sorrendje — ez a sorrend számít
-
-**1. Előbb töröld a kint lévő adatot.** A jelenleg élő függvény még
-hitelesítés nélkül fogadja a kérést, tehát ez most még működik:
-
-```bash
-curl -X DELETE https://proscanner.netlify.app/api/history
-curl -X DELETE "https://proscanner.netlify.app/api/types?type=tp"
-```
-
-Ellenőrzés — üres tömböt kell kapnod:
-
-```bash
-curl https://proscanner.netlify.app/api/history
-```
-
-**2. Utána zárd le a végpontot.** Két lehetőség:
-
-| Megoldás | Hogyan | Eredmény |
-|---|---|---|
-| **Ajánlott: teljes eltávolítás** | Töröld a `netlify/` mappát és a `netlify.toml`-ból az `/api/*` átirányítást, majd deploy | A végpont `404` |
-| Meghagyás, zárva | Csak deploy-old a mostani kódot, és **ne** állítsd be a `PROSCANNER_API_KEY`-t | A végpont `503`, adatot nem ad |
-
-> **Fordított sorrendben ne csináld.** Ha előbb deploy-olsz, a végpont
-> lezárul, és utána a régi rekordot már nem tudod az API-n keresztül törölni —
-> csak a Netlify felületén, a Blobs tároló kézi ürítésével.
-
-### Bejelentés
-
-Ha valódi személyek adatai kikerültek, az adatvédelmi tisztviselővel egyeztetni
-kell a bejelentési kötelezettségről — GDPR 33. cikk: az incidens tudomásra
-jutásától számított **72 óra**.
-
----
-
-## 3. Fájlhierarchia
+## 2. Fájlhierarchia
 
 ```
 prohuman-scanner/
 │
-├── index.html                  ← A TELJES ALKALMAZÁS (~2500 sor, nulla függőség)
-│   ├── <style>                    CSS: rács-elrendezés, modálok, töréspontok
-│   ├── <body>                     Háromhasábos felület + 2 modális ablak
-│   └── <script>                   Az összes logika egyetlen IIFE-ben:
-│       ├── Konfiguráció           dokumentumtípusok, időcsoportok, kiterjesztések
-│       ├── Helyi tárolás          localStorage + IndexedDB (nincs hálózat)
-│       ├── Típus-sorok            célmappák, drag&drop sorrend, javaslat-legördülő
-│       ├── Mappa & fájllista      File System Access API, mtime szerinti csoportosítás
-│       ├── Előnézet               PDF/PSD/TIFF/kép renderelés, nagyítás, pásztázás
-│       ├── OCR                    Tesseract worker, szöveg → űrlapmezők
-│       ├── Névépítés              tisztítás, ütközéskezelés
-│       ├── Áthelyezés             doFinish() — a fő munkafolyamat
-│       ├── Előzmény               DOM-alapú lista, JSON export/import
-│       └── IndexedDB              mappa-engedélyek megőrzése újraindítás után
+├── index.html          ← A TELJES ALKALMAZÁS (~2350 sor, nulla függőség)
+│   ├── <style>            CSS: rács-elrendezés, modálok, töréspontok
+│   ├── <body>             Háromhasábos felület + 2 modális ablak
+│   └── <script>           Az összes logika egyetlen IIFE-ben:
+│       ├── Konfiguráció   dokumentumtípusok, időcsoportok, kiterjesztések
+│       ├── Helyi tárolás  localStorage + IndexedDB (nincs hálózat)
+│       ├── Típus-sorok    célmappák, drag&drop sorrend, javaslat-legördülő
+│       ├── Mappa & lista  File System Access API, mtime szerinti csoportosítás
+│       ├── Előnézet       PDF/PSD/TIFF/kép renderelés, nagyítás, pásztázás
+│       ├── OCR            Tesseract worker, szöveg → űrlapmezők
+│       ├── Névépítés      tisztítás, ütközéskezelés
+│       ├── Áthelyezés     doFinish() — a fő munkafolyamat
+│       ├── Előzmény       DOM-alapú lista, JSON export/import
+│       └── IndexedDB      mappa-engedélyek megőrzése újraindítás után
 │
-│   ── AZ ALÁBBIAKAT A KLIENS MÁR NEM HASZNÁLJA ──────────────────────
-│      Megmaradtak arra az esetre, ha később mégis kellene gépek közötti
-│      szinkron. Mindkettő hitelesítést követel és kulcs nélkül 503-at ad,
-│      így önmagukban nem jelentenek kockázatot.
-│
-├── backend.js                  ← Helyi API (Express, csak 127.0.0.1)
-├── netlify/functions/api.js    ← Netlify Function v2 + Blobs
-├── netlify.toml                ← Build, átirányítás, biztonsági fejlécek
-├── package.json                ← Csak a fenti kettőhöz kell
-├── package-lock.json
-├── types_api.json              ← A helyi backend adatfájlja
-├── history_api.json            ← A helyi backend adatfájlja (git-ignorált!)
-│
+├── netlify.toml        ← Csak biztonsági fejlécek (ha Netlifyről szolgálod ki)
 ├── .gitignore
-└── README.md                   ← Ez a fájl
+└── README.md           ← Ez a fájl
 ```
+
+Ennyi. **Nincs szerverkód, nincs függőség, nincs build-lépés, nincs API.**
 
 ### Miért egyetlen `index.html`?
 
@@ -166,7 +106,7 @@ A teljes alkalmazás **egy fájl, nulla build-lépés**. Ez tudatos döntés:
 
 ---
 
-## 4. Architektúra
+## 3. Architektúra
 
 ```
 ┌────────────────────────────────────────────────────────────────┐
@@ -201,7 +141,7 @@ védett.
 
 ---
 
-## 5. Technológiák — mit mire használunk és miért
+## 4. Technológiák — mit mire használunk és miért
 
 ### Kliensoldal (ez fut ténylegesen)
 
@@ -216,15 +156,6 @@ védett.
 | **localStorage** | böngésző natív | Előzmény, típusok, útvonalak, beállítások | Egyszerű kulcs-érték adatokhoz elegendő, szinkron elérésű. |
 | **Intl.Collator** | böngésző natív | Magyar ábécé szerinti, számérzékeny rendezés | `{ numeric: true }` mellett a `kép2` a `kép10` elé kerül — a naiv szövegrendezés fordítva tenné. |
 
-### Szerveroldal (megmaradt, de a kliens nem hívja)
-
-| Technológia | Verzió | Szerep |
-|---|---|---|
-| **Netlify Functions v2** | platform | Szerver nélküli API. A v2 a szabványos `Request`/`Response` objektumokat használja, nem a régi `event`/`context` párost. |
-| **Netlify Blobs** | 10.7.10 | Perzisztens tárolás. **Ez nem stílusdöntés volt:** a Functions fájlrendszere a `/tmp`-n kívül írásvédett, és minden hívás más konténerben futhat. A korábbi `fs.writeFile()` `EROFS`-szal elszállt, a memóriában tartott adat pedig a konténerrel együtt eltűnt — ezért adott a `GET /api/types` mindig üres eredményt. |
-| **Express** | 4.19.2 | Helyi API. Csak a `127.0.0.1`-en figyel. |
-| **node:crypto** | Node 18+ | `timingSafeEqual` konstans idejű kulcs-összehasonlítás. |
-
 ### Ami tudatosan **nincs**
 
 - **Nincs build-lépés** — se webpack, se Vite, se TypeScript-fordítás.
@@ -235,7 +166,7 @@ védett.
 
 ---
 
-## 6. Adatfolyam
+## 5. Adatfolyam
 
 Egy dokumentum teljes útja:
 
@@ -271,7 +202,7 @@ Egy dokumentum teljes útja:
 6.  Kész  →  doFinish()
       isFinishing zár ────────── dupla végrehajtás ellen
       ├── kötelező mezők ellenőrzése (piros kiemelés)
-      ├── getTargetDirectoryHandle()   ← lásd 8. fejezet
+      ├── getTargetDirectoryHandle()   ← lásd 7. fejezet
       ├── uniqueNameInDir()            ← ütközés esetén " (2)", " (3)" …
       ├── moveFileToDirectory()        ← handle.move(), fallback: másolás+törlés
       │
@@ -290,7 +221,7 @@ kerültek be a javaslatok közé, és onnan már nem lehetett kiszedni őket.
 
 ---
 
-## 7. Fájlnév-szabályok
+## 6. Fájlnév-szabályok
 
 ```
 {Név} {Típus} {Érvényesség}.{eredeti kiterjesztés}
@@ -324,7 +255,7 @@ akkor nincs utótag — így az újra-átnevezés nem hoz létre duplikátumot.
 
 ---
 
-## 8. Célmappa-feloldás
+## 7. Célmappa-feloldás
 
 Ez a projekt legkényesebb pontja. A böngésző **biztonsági okból nem adja meg**
 a kiválasztott mappa abszolút útvonalát — csak a nevét (`"tp"`). Ezért egyszer
@@ -377,7 +308,7 @@ Két esetet külön kell kezelni, különben a normalizálás elrontja őket:
 
 ---
 
-## 9. Biztonsági modell
+## 8. Biztonsági modell
 
 ### A legfontosabb: nincs kimenő adatkapcsolat
 
@@ -432,26 +363,6 @@ Egy fájlrendszer-jogosultságú oldalon ez nem apróság: egyetlen kompromittá
 CDN-csomag teljes lemez-hozzáférést jelentene. Az `integrity` miatt a böngésző
 eldobja a szkriptet, ha akár egyetlen bájt is más.
 
-### A megmaradt szerverkód
-
-A `backend.js` és a `netlify/functions/api.js` már nem része a működésnek, de
-ha valaki elindítja vagy deploy-olja őket, akkor is védettek:
-
-- **Fail-closed:** `PROSCANNER_API_KEY` nélkül minden adatvégpont `503`-at ad.
-- **Hitelesítés minden végponton**, az olvasáson is, `X-Api-Key` fejléccel.
-- **Konstans idejű kulcs-összehasonlítás** (SHA-256 + `timingSafeEqual`) —
-  a naiv `===` az első eltérő karakternél kilép, így a válaszidőből
-  karakterenként ki lehetne találni a kulcsot.
-- **CORS allowlist**, nem `*`.
-- **A kliens `id`-jét eldobja**, sajátot generál — az XSS forrásánál elvágva.
-- **Bemenet-fehérlista** és mennyiségi limitek.
-- **A helyi backend csak a `127.0.0.1`-en figyel.** Korábban minden hálózati
-  interfészen, nyitott CORS mellett — vagyis a céges wifin bárki lekérhette a
-  teljes előzményt.
-- **Atomi fájlírás** (ideiglenes fájl + `rename`) és **soros végrehajtás**
-  (`withLock`) az olvasás-módosítás-írás verseny ellen.
-- **Nincs stack trace a hibaválaszokban.**
-
 ### HTTP biztonsági fejlécek (`netlify.toml`)
 
 Csak akkor érvényesek, ha az oldalt a Netlifyről szolgálják ki — `file://`
@@ -465,13 +376,12 @@ megnyitásnál nincs HTTP-válasz, tehát CSP sincs.
 | `Referrer-Policy: no-referrer` | Fájlnevek/útvonalak ne szivárogjanak |
 | `Permissions-Policy` | Kamera, mikrofon, helyadat kikapcsolva |
 
-A `publish = "."` a repó gyökerét tenné közzé, ezért a `netlify.toml`
-`force = true` átirányításai `404`-re állítják a `backend.js`, `package.json`,
-`history_api.json`, `types_api.json` és `netlify/*` útvonalakat.
+A publikált mappában mindössze az `index.html`, a `netlify.toml` és ez a
+README van — nincs szerverkód, adatfájl vagy függőség, amit el kellene zárni.
 
 ---
 
-## 10. Adatvédelem / GDPR
+## 9. Adatvédelem / GDPR
 
 ### Milyen személyes adatot kezel
 
@@ -505,7 +415,7 @@ A `publish = "."` a repó gyökerét tenné közzé, ezért a `netlify.toml`
 
 ---
 
-## 11. Tesztelés és ellenőrzés
+## 10. Tesztelés és ellenőrzés
 
 ### Az alapállítás ellenőrzése: nem megy ki adat
 
@@ -524,25 +434,6 @@ Futásidőben: `F12` → **Network** fül → dolgozz végig néhány fájlt.
 A CDN-ek betöltésén (és az OCR nyelvi modelljén) kívül **nem szabad**
 kimenő kérésnek megjelennie.
 
-### Szintaxis-ellenőrzés
-
-```bash
-npm run check      # backend.js + netlify/functions/api.js
-```
-
-### A régi telepítés lezárásának ellenőrzése
-
-```bash
-curl -s -o /dev/null -w "%{http_code}\n" https://proscanner.netlify.app/api/history
-# Elvárt: 404 (törölt függvény) vagy 503 (kulcs nélküli deploy)
-# HIBÁS:  200 — ilyenkor a régi, nyitott függvény fut még
-
-for f in backend.js package.json history_api.json types_api.json; do
-  echo "$f → $(curl -s -o /dev/null -w '%{http_code}' https://proscanner.netlify.app/$f)"
-done
-# Elvárt: mind 404
-```
-
 ### Kézi teszt-forgatókönyvek
 
 | Mit | Elvárt eredmény |
@@ -557,12 +448,12 @@ done
 
 ---
 
-## 12. Hibaelhárítás
+## 11. Hibaelhárítás
 
 | Tünet | Ok | Megoldás |
 |---|---|---|
 | „Ez a böngésző nem támogatja a mappa-elérést" | Firefox / Safari | Chrome vagy Edge |
-| Az OCR nem indul | CDN-blokk vagy hálózati hiba | Konzol: SRI-hiba? Lásd [13. Karbantartás](#13-karbantartás) |
+| Az OCR nem indul | CDN-blokk vagy hálózati hiba | Konzol: SRI-hiba? Lásd [13. Karbantartás](#12-karbantartás) |
 | Az OCR lassú az első futáskor | A nyelvi modell letöltése (~15 MB) | Egyszeri, utána gyorsítótárazott |
 | A fájl rossz mappába került | **Javítva** — régi verzió | Frissítsd az `index.html`-t |
 | „Nem érhető el a célmappa" | Lejárt mappa-engedély | „Mappa…" gomb újbóli használata |
@@ -571,7 +462,7 @@ done
 
 ---
 
-## 13. Karbantartás
+## 12. Karbantartás
 
 ### CDN-verzió frissítése
 
@@ -592,22 +483,7 @@ A felületről: **+** gomb. Kódból: `DEFAULT_TYPES` az `index.html`-ben.
 Ha az új típushoz **kötelező** az érvényesség, vedd fel a
 `VALIDITY_REQUIRED_TYPES` tömbbe is.
 
-### Ha később mégis kellene gépek közötti szinkron
-
-A szerverkód készen áll (`backend.js`, `netlify/functions/api.js`), de a
-kliensből az API-hívások ki lettek véve. Visszakötés esetén **kötelező**:
-
-1. `PROSCANNER_API_KEY` beállítása a kiszolgálón (enélkül `503`).
-2. A kliensből `X-Api-Key` fejléc küldése minden kérésnél.
-3. Annak tudomásulvétele, hogy a személyes adat ettől kezdve **külső
-   adatfeldolgozóhoz** kerül — ehhez DPA és adatkezelési nyilvántartás kell.
-
-Alternatíva, ami nem jár adatkivitellel: JSON Export egy közös hálózati
-meghajtóra, és Import a másik gépen.
-
----
-
-## 14. Ismert korlátok
+## 13. Ismert korlátok
 
 | Korlát | Részletek |
 |---|---|

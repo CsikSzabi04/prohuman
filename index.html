@@ -504,11 +504,7 @@
   let rootAbsPath = "";
   try { rootAbsPath = localStorage.getItem("scanRenamer_rootAbsPath") || ""; } catch(_){}
 
-  // ÚTVONAL-NORMALIZÁLÁS — a backend.js és a netlify függvény normPath-jával
-  // BÁJTRA AZONOS. (Korábban eltértek: a frontend a `\` ismétlődéseket is
-  // összevonta, a backend csak a `/`-t, ezért ugyanaz az útvonal két külön
-  // javaslatként került be.)
-  //
+  // ÚTVONAL-NORMALIZÁLÁS
   // Két esetet KÜLÖN kell kezelni, különben a normalizálás elrontja őket:
   //  · UNC hálózati útvonal (\\fileserver\HR\tp): a vezető KÉT elválasztó
   //    egyetlen `\`-re olvadt, így az isAbsPath már nem ismerte fel, és a

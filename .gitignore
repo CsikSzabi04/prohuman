@@ -4,13 +4,11 @@ node_modules/
 # Titkok — SOHA ne kerüljenek verziókövetésbe
 .env
 .env.*
-!.env.example
 
-# A helyi backend előzményfájlja SZEMÉLYES ADATOT tartalmaz (nevek,
-# dokumentumtípusok, lemezes útvonalak). Verziókövetésbe kerülve
-# visszavonhatatlanul bekerülne a git történetbe.
+# A helyi futás melléktermékei. A history_api.json SZEMÉLYES ADATOT
+# tartalmazna (nevek, dokumentumtípusok, lemezes útvonalak), ezért
+# verziókövetésbe kerülve visszavonhatatlanul bekerülne a git-történetbe —
+# a repó pedig nyilvános, és a GitHub Pages minden fájlt kiszolgál.
 history_api.json
-
-# Atomi írás közbeni ideiglenes fájlok
+types_api.json
 *.tmp
-*.[0-9]*.tmp
