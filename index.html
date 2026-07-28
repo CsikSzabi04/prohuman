@@ -832,15 +832,12 @@
       const inputWrapper = document.createElement("div");
       inputWrapper.className = "path-input-wrapper";
 
-      const defaultVal = docPaths[t] || (typesApiData && typesApiData.pathSuggestions && typesApiData.pathSuggestions[t] && typesApiData.pathSuggestions[t][0]) || t;
-      docPaths[t] = defaultVal;
-
       const input = document.createElement("input");
       input.type = "text";
       input.className = "path-input";
       input.id = "path-input-" + slugify(t);
       input.placeholder = "copy the path to move";
-      input.value = docPaths[t];
+      input.value = docPaths[t] || "";
       input.autocomplete = "off";
 
       const dropdown = document.createElement("div");
@@ -860,7 +857,7 @@
         }
 
         const query = input.value.trim().toLowerCase();
-        return Array.from(set).filter(s => !query || s.toLowerCase().includes(query));
+        return Array.from(set).filter(s => s && s.toLowerCase() !== t.toLowerCase() && (!query || s.toLowerCase().includes(query)));
       };
 
       const renderDropdown = () => {
@@ -903,11 +900,6 @@
       btn.textContent = t;
 
       const selectThisType = () => {
-        if(!docPaths[t]){
-          docPaths[t] = (typesApiData && typesApiData.pathSuggestions && typesApiData.pathSuggestions[t] && typesApiData.pathSuggestions[t][0]) || t;
-          input.value = docPaths[t];
-          saveDocPaths();
-        }
         if (selectedType !== t) {
           selectedType = t;
           updateTypeRowSelection();
@@ -922,9 +914,6 @@
         const pathVal = input.value.trim();
         docPaths[t] = pathVal;
         saveDocPaths();
-        if(pathVal){
-          savePathSuggestionForType(t, pathVal);
-        }
         if (selectedType !== t) {
           selectedType = t;
           updateTypeRowSelection();
@@ -1017,7 +1006,6 @@
         const inp = $("path-input-" + slugify(t));
         if(inp) inp.value = folderName;
         saveDocPaths();
-        savePathSuggestionForType(t, folderName);
         selectedType = t;
         updateTypeRowSelection();
         clearValidationErrors();
@@ -1537,6 +1525,11 @@
       f.name = targetFileName;
       markDone();
 
+      const finalPath = pathVal || targetDirHandle.name;
+      if(typeVal && finalPath){
+        await savePathSuggestionForType(typeVal, finalPath);
+      }
+
       addHistoryEntry({
         origName: origName,
         newName: targetFileName,
@@ -1544,7 +1537,7 @@
         type: typeVal,
         validity: validVal,
         year: selectedYear,
-        targetPath: pathVal || targetDirHandle.name
+        targetPath: finalPath
       });
 
       setStatus("Sikeresen áthelyezve: " + targetFileName + " ➔ " + pathVal, "ok");
