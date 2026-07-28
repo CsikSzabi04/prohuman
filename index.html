@@ -92,12 +92,29 @@
   input[type=text]{width:100%;padding:9px 11px;border:1px solid var(--line);border-radius:8px;font:inherit;transition:border-color .15s, background-color .15s}
   input[type=text]:focus{outline:2px solid #bcd0fb;border-color:var(--accent)}
   .lockline{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);margin-top:4px}
-  /* Type Rows list styling */
-  .type-rows-container{display:flex;flex-direction:column;gap:6px;margin-top:6px;padding:4px;border-radius:10px;border:1px solid transparent;transition:all .15s ease}
+  /* Type Header Controls & Edit Mode */
+  .type-header-ctl{display:flex;align-items:center;justify-content:space-between;margin-top:14px;margin-bottom:6px}
+  .type-header-ctl label{margin:0}
+  .type-actions-btns{display:flex;gap:6px;margin-left:auto}
+  .btn-type-ctl{width:26px;height:26px;padding:0;font-size:13px;font-weight:700;border-radius:6px;border:1px solid var(--line);background:#f8fafc;color:var(--ink);cursor:pointer;transition:all .15s ease;display:inline-flex;align-items:center;justify-content:center;line-height:1}
+  .btn-type-ctl:hover{background:#e0e7ff;border-color:#a5b4fc;color:var(--accent-d)}
+  .btn-type-ctl.active{background:var(--accent);color:#fff;border-color:var(--accent);box-shadow:0 2px 4px rgba(37,99,235,0.2)}
+
+  /* Type Rows list styling & Drag animations */
+  .type-rows-container{display:flex;flex-direction:column;gap:6px;margin-top:4px;padding:4px;border-radius:10px;border:1px solid transparent;transition:all .15s ease}
   .type-rows-container.is-invalid{border:2px solid var(--err) !important;background-color:var(--err-bg) !important}
-  .type-row{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:8px;border:1.5px solid transparent;background:#fff;transition:all .15s ease}
+  .type-row{display:flex;gap:8px;align-items:center;padding:4px 6px;border-radius:8px;border:1.5px solid transparent;background:#fff;transition:transform .18s cubic-bezier(0.2,0,0,1), box-shadow .18s ease, border-color .15s ease, background-color .15s ease}
   .type-row:hover{background:#f8fafc;border-color:#e2e8f0}
   .type-row.sel{background:#eff6ff;border-color:#93c5fd}
+  .type-row.is-edit-mode{border-color:#cbd5e1;background:#f8fafc}
+  .type-row.dragging{opacity:0.4;transform:scale(0.98);box-shadow:0 8px 16px rgba(0,0,0,0.12)}
+  .type-row.drag-over-top{border-top:2.5px solid var(--accent) !important;transform:translateY(2px)}
+  .type-row.drag-over-bottom{border-bottom:2.5px solid var(--accent) !important;transform:translateY(-2px)}
+  
+  .drag-handle{cursor:grab;padding:4px 6px;font-size:14px;color:var(--muted);user-select:none;display:flex;align-items:center;border-radius:4px;transition:background .15s ease;letter-spacing:-1px}
+  .drag-handle:active{cursor:grabbing}
+  .drag-handle:hover{background:#e2e8f0;color:var(--ink)}
+  
   .type-row .path-input{flex:1;padding:7px 10px;font-size:12px;border:1px solid var(--line);border-radius:6px;background:#fff}
   .type-row.sel .path-input{border-color:#bfdbfe}
   .type-row .pick-dir-btn{padding:5px 8px;font-size:11px;font-weight:600;white-space:nowrap;border:1px solid var(--line);background:#f8fafc;color:var(--muted);border-radius:6px;cursor:pointer;transition:all .15s ease}
@@ -105,6 +122,11 @@
   .type-row .type-btn{width:140px;flex-shrink:0;text-align:center;font-size:12px;font-weight:600;padding:7px 10px;border:1px solid var(--line);background:#fff;color:var(--ink);border-radius:6px;cursor:pointer;user-select:none;transition:all .15s ease}
   .type-row .type-btn:hover{background:#e0e7ff;border-color:#a5b4fc}
   .type-row.sel .type-btn{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:700;box-shadow:0 2px 4px rgba(37,99,235,0.2)}
+  
+  .row-edit-actions{display:flex;gap:4px;align-items:center}
+  .btn-icon-row{padding:4px 7px;font-size:11px;border:1px solid var(--line);border-radius:6px;background:#fff;cursor:pointer;color:var(--muted);transition:all .15s ease}
+  .btn-icon-row:hover{background:#fee2e2;color:var(--err);border-color:#fca5a5}
+  .btn-icon-row.edit:hover{background:#eff6ff;color:var(--accent-d);border-color:#93c5fd}
 
   /* Validation styles */
   .is-invalid{border:2px solid var(--err) !important;background-color:var(--err-bg) !important;box-shadow:0 0 0 3px rgba(220,38,38,0.12) !important}
@@ -245,6 +267,25 @@
   </div>
 </div>
 
+<!-- EGYEDI BEVITELI MODAL (Új típus / Szerkesztés) -->
+<div id="customInputModal" class="modal-backdrop">
+  <div class="modal-dialog" style="max-width: 420px;">
+    <div class="modal-header">
+      <h2 id="customInputTitle" style="margin:0;font-size:15px;font-weight:700">Új dokumentum típus</h2>
+      <button type="button" class="modal-close" id="closeCustomInputBtn" title="Bezárás">&times;</button>
+    </div>
+    <div class="modal-body" style="padding:16px;">
+      <label id="customInputLabel" style="font-weight:600;font-size:13px;margin-bottom:6px;display:block;color:var(--ink);">Típus neve:</label>
+      <input type="text" id="customInputTextField" placeholder="pl. útnyilvántartás" autocomplete="off" style="width:100%;padding:9px 12px;border:1px solid var(--line);border-radius:8px;font-size:13px;" />
+      <div id="customInputError" style="color:var(--err);font-size:12px;margin-top:6px;min-height:16px;"></div>
+    </div>
+    <div class="modal-footer" style="padding:12px 16px;background:#f8fafc;border-top:1px solid var(--line);display:flex;justify-content:flex-end;gap:8px;">
+      <button type="button" id="cancelCustomInputBtn" class="btn-sm">Mégse</button>
+      <button type="button" id="submitCustomInputBtn" class="primary btn-sm">Mentés</button>
+    </div>
+  </div>
+</div>
+
 <div class="wrap">
   <!-- FÁJLLISTA -->
   <div class="panel" id="filePanel">
@@ -284,7 +325,13 @@
     <label id="lblFName">Név <span class="req-star">*</span></label>
     <input type="text" id="fName" placeholder="pl. Kovács János" autocomplete="off"/>
 
-    <label id="lblFType">Dokumentum típusa és célmappája <span class="req-star">*</span></label>
+    <div class="type-header-ctl">
+      <label id="lblFType">Dokumentum típusa és célmappája <span class="req-star">*</span></label>
+      <div class="type-actions-btns">
+        <button type="button" id="addTypeBtn" class="btn-type-ctl" title="Új dokumentum típus hozzáadása">+</button>
+        <button type="button" id="editTypesBtn" class="btn-type-ctl" title="Típusok szerkesztése és sorrend húzása">✏️</button>
+      </div>
+    </div>
     <div class="type-rows-container" id="typeRowsContainer"></div>
 
     <label id="lblFValid">Érvényesség <span id="validReqBadge"></span></label>
@@ -373,19 +420,35 @@
   let docPaths = {};
   let selectedYear = String(new Date().getFullYear());
 
-  // Betöltjük a mentett évet és célmappa-útvonalakat
+  let docTypes = [...DEFAULT_TYPES];
+  let isEditMode = false;
+  let draggedIdx = null;
+
+  // Betöltjük a mentett évet, típusokat és célmappa-útvonalakat
   try {
     const savedYear = localStorage.getItem("scanRenamer_year");
     if (savedYear) selectedYear = savedYear;
     const savedPaths = localStorage.getItem("scanRenamer_docPaths");
     if (savedPaths) docPaths = JSON.parse(savedPaths);
+    const savedTypes = localStorage.getItem("scanRenamer_docTypes");
+    if (savedTypes) {
+      const parsed = JSON.parse(savedTypes);
+      if (Array.isArray(parsed) && parsed.length > 0) docTypes = parsed;
+    }
   } catch(_) {}
+
+  function saveDocTypes(){
+    try {
+      localStorage.setItem("scanRenamer_docTypes", JSON.stringify(docTypes));
+    } catch(_) {}
+  }
 
   // ---- Elemek -------------------------------------------------------
   const $ = id => document.getElementById(id);
   const el = {
     pick:$("pickBtn"), resume:$("resumeBtn"), list:$("fileList"), counter:$("counter"), banner:$("banner"),
     yearSelect:$("yearSelect"),
+    addTypeBtn:$("addTypeBtn"), editTypesBtn:$("editTypesBtn"),
     prev:$("previewBox"), ocr:$("ocrBtn"), prog:$("progBar"), pct:$("ocrPct"),
     ocrText:$("ocrText"), toggleText:$("toggleText"),
     name:$("fName"), typeContainer:$("typeRowsContainer"),
@@ -416,15 +479,263 @@
     });
   }
 
-  // ---- Típus-sorok & Célmappák -------------------------------------
-  function slugify(s){ return s.replace(/\s+/g,"_").replace(/[^a-z0-9_]/gi,""); }
+  // ---- Típus-sorok, Célmappák & Dinamikus Kezelés ------------------
+  function slugify(s){ return String(s).replace(/\s+/g,"_").replace(/[^a-z0-9_]/gi,""); }
+
+  if(el.addTypeBtn){
+    el.addTypeBtn.onclick = promptAddType;
+  }
+  if(el.editTypesBtn){
+    el.editTypesBtn.onclick = toggleEditMode;
+  }
+
+  function toggleEditMode(){
+    isEditMode = !isEditMode;
+    if(el.editTypesBtn){
+      if(isEditMode){
+        el.editTypesBtn.classList.add("active");
+        el.editTypesBtn.textContent = "✓";
+        setStatus("Szerkesztő mód: Húzd a sorokat a sorrend módosításához, vagy használd a ✏️ / ✕ gombokat!", "ok");
+      } else {
+        el.editTypesBtn.classList.remove("active");
+        el.editTypesBtn.textContent = "✏️";
+        setStatus("Szerkesztő mód kikapcsolva.", "ok");
+      }
+    }
+    buildTypeRows();
+  }
+
+  function showCustomPrompt({ title, label, value = "", onSubmit }){
+    const modal = $("customInputModal");
+    const titleEl = $("customInputTitle");
+    const labelEl = $("customInputLabel");
+    const inputEl = $("customInputTextField");
+    const errorEl = $("customInputError");
+
+    if(!modal) return;
+    titleEl.textContent = title || "Bevitel";
+    labelEl.textContent = label || "Érték:";
+    inputEl.value = value;
+    errorEl.textContent = "";
+
+    modal.classList.add("active");
+    setTimeout(() => { if(inputEl){ inputEl.focus(); inputEl.select(); } }, 50);
+
+    const close = () => {
+      modal.classList.remove("active");
+      cleanup();
+    };
+
+    const submit = () => {
+      const val = inputEl.value.trim();
+      if(!val){
+        errorEl.textContent = "Kérjük, adj meg egy érvényes nevet!";
+        return;
+      }
+      close();
+      if(onSubmit) onSubmit(val);
+    };
+
+    const handleKeyDown = (e) => {
+      if(e.key === "Enter"){ e.preventDefault(); submit(); }
+      if(e.key === "Escape"){ e.preventDefault(); close(); }
+    };
+
+    const submitBtn = $("submitCustomInputBtn");
+    const cancelBtn = $("cancelCustomInputBtn");
+    const closeBtn = $("closeCustomInputBtn");
+
+    const cleanup = () => {
+      if(submitBtn) submitBtn.onclick = null;
+      if(cancelBtn) cancelBtn.onclick = null;
+      if(closeBtn) closeBtn.onclick = null;
+      if(inputEl) inputEl.onkeydown = null;
+    };
+
+    if(submitBtn) submitBtn.onclick = submit;
+    if(cancelBtn) cancelBtn.onclick = close;
+    if(closeBtn) closeBtn.onclick = close;
+    if(inputEl) inputEl.onkeydown = handleKeyDown;
+  }
+
+  function promptAddType(){
+    showCustomPrompt({
+      title: "Új dokumentum típus",
+      label: "Új dokumentum típus neve:",
+      value: "",
+      onSubmit: (cleanName) => {
+        if(docTypes.includes(cleanName)){
+          alert("Ilyen dokumentum típus már létezik!");
+          return;
+        }
+        docTypes.push(cleanName);
+        saveDocTypes();
+        selectedType = cleanName;
+        buildTypeRows();
+        updateValidityRequirement();
+        clearValidationErrors();
+        updatePreview();
+        setStatus(`Új típus hozzáadva: '${cleanName}'`, "ok");
+      }
+    });
+  }
+
+  function promptEditTypeName(oldName){
+    showCustomPrompt({
+      title: "Típus szerkesztése",
+      label: `Szerkeszd a(z) '${oldName}' típus nevét:`,
+      value: oldName,
+      onSubmit: (cleanName) => {
+        if(cleanName === oldName) return;
+        if(docTypes.includes(cleanName)){
+          alert("Ilyen névvel már létezik típus!");
+          return;
+        }
+        const idx = docTypes.indexOf(oldName);
+        if(idx !== -1){
+          docTypes[idx] = cleanName;
+          if(docPaths[oldName]){
+            docPaths[cleanName] = docPaths[oldName];
+            delete docPaths[oldName];
+            saveDocPaths();
+          }
+          if(selectedType === oldName) selectedType = cleanName;
+          saveDocTypes();
+          buildTypeRows();
+          updateValidityRequirement();
+          updatePreview();
+          setStatus(`Típus átnevezve: '${oldName}' ➔ '${cleanName}'`, "ok");
+        }
+      }
+    });
+  }
+
+  function showCustomConfirm({ title, text, onConfirm }){
+    const modal = $("customInputModal");
+    const titleEl = $("customInputTitle");
+    const labelEl = $("customInputLabel");
+    const inputEl = $("customInputTextField");
+    const errorEl = $("customInputError");
+
+    if(!modal) return;
+    titleEl.textContent = title || "Megerősítés";
+    labelEl.textContent = text || "Biztosan folytatod?";
+    if(inputEl) inputEl.style.display = "none";
+    if(errorEl) errorEl.textContent = "";
+
+    modal.classList.add("active");
+
+    const close = () => {
+      modal.classList.remove("active");
+      if(inputEl) inputEl.style.display = "block";
+      cleanup();
+    };
+
+    const submit = () => {
+      close();
+      if(onConfirm) onConfirm();
+    };
+
+    const submitBtn = $("submitCustomInputBtn");
+    const cancelBtn = $("cancelCustomInputBtn");
+    const closeBtn = $("closeCustomInputBtn");
+
+    const cleanup = () => {
+      if(submitBtn) submitBtn.onclick = null;
+      if(cancelBtn) cancelBtn.onclick = null;
+      if(closeBtn) closeBtn.onclick = null;
+    };
+
+    if(submitBtn) submitBtn.onclick = submit;
+    if(cancelBtn) cancelBtn.onclick = close;
+    if(closeBtn) closeBtn.onclick = close;
+  }
+
+  function deleteType(t){
+    showCustomConfirm({
+      title: "Típus törlése",
+      text: `Biztosan törölni szeretnéd a(z) '${t}' dokumentum típust?`,
+      onConfirm: () => {
+        docTypes = docTypes.filter(x => x !== t);
+        if(docPaths[t]){
+          delete docPaths[t];
+          saveDocPaths();
+        }
+        if(selectedType === t) selectedType = docTypes[0] || "";
+        saveDocTypes();
+        buildTypeRows();
+        updateValidityRequirement();
+        updatePreview();
+        setStatus(`Típus törölve: '${t}'`, "ok");
+      }
+    });
+  }
 
   function buildTypeRows(){
     el.typeContainer.innerHTML = "";
-    DEFAULT_TYPES.forEach(t => {
+    docTypes.forEach((t, idx) => {
       const row = document.createElement("div");
-      row.className = "type-row" + (t === selectedType ? " sel" : "");
+      row.className = "type-row" + (t === selectedType ? " sel" : "") + (isEditMode ? " is-edit-mode" : "");
       row.id = "type-row-" + slugify(t);
+      row.dataset.index = idx;
+
+      if(isEditMode){
+        row.draggable = true;
+
+        const handle = document.createElement("div");
+        handle.className = "drag-handle";
+        handle.innerHTML = "⋮⋮";
+        handle.title = "Húzd a sorrend módosításához";
+        row.appendChild(handle);
+
+        row.ondragstart = (e) => {
+          draggedIdx = idx;
+          row.classList.add("dragging");
+          e.dataTransfer.effectAllowed = "move";
+        };
+
+        row.ondragover = (e) => {
+          e.preventDefault();
+          e.dataTransfer.dropEffect = "move";
+          if(draggedIdx === null || draggedIdx === idx) return;
+
+          const rect = row.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          row.classList.remove("drag-over-top", "drag-over-bottom");
+          if(e.clientY < mid){
+            row.classList.add("drag-over-top");
+          } else {
+            row.classList.add("drag-over-bottom");
+          }
+        };
+
+        row.ondragleave = () => {
+          row.classList.remove("drag-over-top", "drag-over-bottom");
+        };
+
+        row.ondrop = (e) => {
+          e.preventDefault();
+          row.classList.remove("drag-over-top", "drag-over-bottom");
+          if(draggedIdx === null || draggedIdx === idx) return;
+
+          const rect = row.getBoundingClientRect();
+          const mid = rect.top + rect.height / 2;
+          let insertAt = idx;
+          if(e.clientY >= mid) insertAt = idx + 1;
+          if(draggedIdx < insertAt) insertAt--;
+
+          const movedItem = docTypes.splice(draggedIdx, 1)[0];
+          docTypes.splice(insertAt, 0, movedItem);
+
+          saveDocTypes();
+          buildTypeRows();
+        };
+
+        row.ondragend = () => {
+          draggedIdx = null;
+          row.classList.remove("dragging", "drag-over-top", "drag-over-bottom");
+        };
+      }
 
       const input = document.createElement("input");
       input.type = "text";
@@ -485,6 +796,36 @@
       row.appendChild(input);
       row.appendChild(pickBtn);
       row.appendChild(btn);
+
+      if(isEditMode){
+        const actions = document.createElement("div");
+        actions.className = "row-edit-actions";
+
+        const editBtn = document.createElement("button");
+        editBtn.type = "button";
+        editBtn.className = "btn-icon-row edit";
+        editBtn.innerHTML = "✏️";
+        editBtn.title = "Típus nevének szerkesztése";
+        editBtn.onclick = (e) => {
+          e.stopPropagation();
+          promptEditTypeName(t);
+        };
+
+        const delBtn = document.createElement("button");
+        delBtn.type = "button";
+        delBtn.className = "btn-icon-row";
+        delBtn.innerHTML = "✕";
+        delBtn.title = "Típus törlése";
+        delBtn.onclick = (e) => {
+          e.stopPropagation();
+          deleteType(t);
+        };
+
+        actions.appendChild(editBtn);
+        actions.appendChild(delBtn);
+        row.appendChild(actions);
+      }
+
       el.typeContainer.appendChild(row);
     });
   }
@@ -517,7 +858,7 @@
   }
 
   function updateTypeRowSelection(){
-    DEFAULT_TYPES.forEach(t => {
+    docTypes.forEach(t => {
       const row = $("type-row-" + slugify(t));
       if (row) {
         if (t === selectedType) row.classList.add("sel");
@@ -567,7 +908,7 @@
     if(el.name) el.name.classList.remove("is-invalid");
     if(el.valid) el.valid.classList.remove("is-invalid");
     if(el.typeContainer) el.typeContainer.classList.remove("is-invalid");
-    DEFAULT_TYPES.forEach(t => {
+    docTypes.forEach(t => {
       const inp = $("path-input-" + slugify(t));
       if(inp) inp.classList.remove("is-invalid");
     });
