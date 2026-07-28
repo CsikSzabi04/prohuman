@@ -1747,7 +1747,10 @@
 
   async function loadHistoryFromApi(){
     try {
-      let resp = await fetch('http://localhost:88/api/history').catch(() => null);
+      let resp = await fetch('/api/history').catch(() => null);
+      if(!resp || !resp.ok){
+        resp = await fetch('http://localhost:88/api/history').catch(() => null);
+      }
       if(!resp || !resp.ok){
         const url = location.protocol === 'file:'
           ? 'https://csikszabi04.github.io/prohuman/history_api.json'
@@ -1799,11 +1802,17 @@
     saveHistory();
 
     try {
-      fetch('http://localhost:88/api/history', {
+      fetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item)
-      }).catch(() => {});
+      }).catch(() => {
+        fetch('http://localhost:88/api/history', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify(item)
+        }).catch(() => {});
+      });
     } catch(_) {}
   }
 
