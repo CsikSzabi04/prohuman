@@ -457,6 +457,26 @@
     } catch(_) {}
   }
 
+  async function apiFetch(endpoint, options = {}) {
+    const urls = [];
+    if (window.location.protocol !== 'file:') {
+      urls.push(endpoint);
+    }
+    urls.push('https://proscanner.netlify.app' + endpoint);
+    urls.push('http://localhost:88' + endpoint);
+
+    let lastErr = null;
+    for (const url of urls) {
+      try {
+        const res = await fetch(url, options);
+        if (res && (res.ok || res.status < 500)) return res;
+      } catch (err) {
+        lastErr = err;
+      }
+    }
+    throw lastErr || new Error("API Nem érhető el");
+  }
+
   async function savePathSuggestionForType(t, pathVal){
     if(!t || !pathVal) return;
     const cleanPath = pathVal.trim();
@@ -477,16 +497,10 @@
       };
 
       try {
-        await fetch('/api/types', {
+        await apiFetch('/api/types', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify(payload)
-        }).catch(() => {
-          return fetch('http://localhost:88/api/types', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify(payload)
-          });
         });
       } catch(_) {}
     }
@@ -494,16 +508,7 @@
 
   async function loadTypesFromApi(){
     try {
-      let resp = await fetch('/api/types').catch(() => null);
-      if(!resp || !resp.ok){
-        resp = await fetch('http://localhost:88/api/types').catch(() => null);
-      }
-      if(!resp || !resp.ok){
-        const url = location.protocol === 'file:'
-          ? 'https://csikszabi04.github.io/prohuman/types_api.json'
-          : './types_api.json';
-        resp = await fetch(url + '?v=' + Date.now());
-      }
+      let resp = await apiFetch('/api/types').catch(() => null);
       if(resp && resp.ok){
         const data = await resp.json();
         if(data && typeof data === 'object'){
@@ -530,9 +535,7 @@
           }
         }
       }
-    } catch(err) {
-      // Ignore local file CORS fetch errors gracefully
-    }
+    } catch(err) {}
   }
 
   // ---- Elemek -------------------------------------------------------
@@ -1791,16 +1794,7 @@
 
   async function loadHistoryFromApi(){
     try {
-      let resp = await fetch('/api/history').catch(() => null);
-      if(!resp || !resp.ok){
-        resp = await fetch('http://localhost:88/api/history').catch(() => null);
-      }
-      if(!resp || !resp.ok){
-        const url = location.protocol === 'file:'
-          ? 'https://csikszabi04.github.io/prohuman/history_api.json'
-          : './history_api.json';
-        resp = await fetch(url + '?v=' + Date.now());
-      }
+      let resp = await apiFetch('/api/history').catch(() => null);
       if(resp && resp.ok){
         const apiData = await resp.json();
         if(Array.isArray(apiData)){
@@ -1810,9 +1804,7 @@
           renderHistoryList();
         }
       }
-    } catch(err) {
-      // Ignore local file CORS fetch errors gracefully
-    }
+    } catch(err) {}
   }
 
   function addHistoryEntry(entry){
@@ -1835,17 +1827,11 @@
     saveHistory();
 
     try {
-      fetch('/api/history', {
+      apiFetch('/api/history', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(item)
-      }).catch(() => {
-        fetch('http://localhost:88/api/history', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify(item)
-        }).catch(() => {});
-      });
+      }).catch(() => {});
     } catch(_) {}
   }
 
